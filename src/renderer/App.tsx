@@ -3,6 +3,7 @@ import { useProjectStore } from './state/projectStore';
 import { Preview } from './components/Preview';
 import { Timeline } from './components/Timeline';
 import { ClipList } from './components/ClipList';
+import { Sequence } from './components/Sequence';
 
 export function App() {
   const project = useProjectStore(s => s.project);
@@ -32,7 +33,9 @@ export function App() {
       <div className="side">
         <ClipList />
       </div>
-      <div className="seq"><span className="dim">Sequence</span></div>
+      <div className="seq">
+        <Sequence />
+      </div>
     </div>
   );
 }

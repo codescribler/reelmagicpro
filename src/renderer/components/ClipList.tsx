@@ -23,6 +23,8 @@ export function ClipList() {
           const isInv = invalid.has(c.id);
           return (
             <div key={c.id}
+              draggable
+              onDragStart={e => { e.dataTransfer.setData('text/clipId', c.id); }}
               onClick={() => select(c.id)}
               style={{
                 padding: '6px 8px',
