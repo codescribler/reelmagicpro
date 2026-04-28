@@ -39,8 +39,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       if (r.canceled || !r.filePath) return { ok: false };
       target = r.filePath;
     }
-    await saveProject(args.project, target);
-    return { ok: true, path: target };
+    try {
+      await saveProject(args.project, target);
+      return { ok: true, path: target };
+    } catch (e: any) {
+      return { ok: false };
+    }
   });
 
   ipcMain.handle('app:loadProject', async (): Promise<LoadProjectResult> => {
@@ -73,6 +77,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         runId: args.runId, clip: args.clip, source: args.source, outputPath: args.outputPath,
         onProgress: sendProgress, signal: ctrl.signal,
       });
+    } catch (e: any) {
+      return { ok: false, error: e?.message ?? String(e) };
     } finally {
       activeRuns.delete(args.runId);
     }
@@ -87,6 +93,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         source: args.source, outputPath: args.outputPath,
         onProgress: sendProgress, signal: ctrl.signal,
       });
+    } catch (e: any) {
+      return { ok: false, error: e?.message ?? String(e) };
     } finally {
       activeRuns.delete(args.runId);
     }

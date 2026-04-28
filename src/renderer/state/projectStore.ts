@@ -64,18 +64,32 @@ export const useProjectStore = create<State>((set, get) => ({
     project: { ...state.project, clips: state.project.clips.map(c => c.id === id ? { ...c, ...patch } : c) },
     dirty: true,
   }) : state),
-  deleteClip: (id) => set(state => state.project ? ({
-    project: {
-      ...state.project,
-      clips: state.project.clips.filter(c => c.id !== id),
-      sequence: state.project.sequence.filter(e => e.clipId !== id),
-    },
-    selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
-    previewMode: state.previewMode.kind === 'clip' && state.previewMode.clipId === id
-      ? { kind: 'source' }
-      : state.previewMode,
-    dirty: true,
-  }) : state),
+  deleteClip: (id) => set(state => {
+    if (!state.project) return state;
+    const newSequence = state.project.sequence.filter(e => e.clipId !== id);
+    const oldEntry = state.project.sequence[
+      state.previewMode.kind === 'sequence' ? state.previewMode.index : -1
+    ];
+    const sequenceWasPlayingDeletedClip =
+      state.previewMode.kind === 'sequence' && oldEntry?.clipId === id;
+
+    let nextPreviewMode = state.previewMode;
+    if (
+      (state.previewMode.kind === 'clip' || state.previewMode.kind === 'set-zoom')
+      && state.previewMode.clipId === id
+    ) {
+      nextPreviewMode = { kind: 'source' };
+    } else if (sequenceWasPlayingDeletedClip) {
+      nextPreviewMode = { kind: 'source' };
+    }
+
+    return {
+      project: { ...state.project, clips: state.project.clips.filter(c => c.id !== id), sequence: newSequence },
+      selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
+      previewMode: nextPreviewMode,
+      dirty: true,
+    };
+  }) ,
   duplicateClip: (id) => {
     const proj = get().project;
     if (!proj) return null;
