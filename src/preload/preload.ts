@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('reelmagic', {
   cancelExport: (runId: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('app:cancelExport', runId),
   checkPath: (p: string): Promise<{ exists: boolean }> => ipcRenderer.invoke('app:checkPath', p),
+  chooseExportPath: (suggestedName: string): Promise<{ ok: boolean; path?: string }> =>
+    ipcRenderer.invoke('app:chooseExportPath', suggestedName),
   onExportProgress: (cb: (p: ExportProgress) => void) => {
     const handler = (_: unknown, p: ExportProgress) => cb(p);
     ipcRenderer.on('app:exportProgress', handler);

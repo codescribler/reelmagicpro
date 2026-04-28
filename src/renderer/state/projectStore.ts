@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, Clip, SourceMeta, SequenceEntry, ZoomRect } from '../../shared/types';
+import type { Project, Clip, SourceMeta, SequenceEntry, ZoomRect, ExportProgress } from '../../shared/types';
 
 export type PreviewMode =
   | { kind: 'idle' }
@@ -29,6 +29,13 @@ interface State {
   appendToSequence: (clipId: string) => void;
   reorderSequence: (from: number, to: number) => void;
   removeFromSequence: (index: number) => void;
+
+  activeRun: { runId: string; phase: ExportProgress['phase']; percent: number; currentItem: number; totalItems: number } | null;
+  exportResult: { ok: boolean; outputPath?: string; error?: string } | null;
+  startRun: (runId: string) => void;
+  setProgress: (p: ExportProgress) => void;
+  setExportResult: (r: { ok: boolean; outputPath?: string; error?: string } | null) => void;
+  clearRun: () => void;
 }
 
 function newId(): string {
@@ -120,4 +127,12 @@ export const useProjectStore = create<State>((set, get) => ({
     const seq = state.project.sequence.filter((_, i) => i !== index);
     return { project: { ...state.project, sequence: seq }, dirty: true };
   }),
+
+  activeRun: null,
+  exportResult: null,
+  startRun: (runId) => set({ activeRun: { runId, phase: 'rendering-part', percent: 0, currentItem: 1, totalItems: 1 }, exportResult: null }),
+  setProgress: (p) => set(state => state.activeRun && state.activeRun.runId === p.runId
+    ? { activeRun: { ...state.activeRun, ...p } } : state),
+  setExportResult: (r) => set({ exportResult: r }),
+  clearRun: () => set({ activeRun: null, exportResult: null }),
 }));

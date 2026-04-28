@@ -111,4 +111,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     try { await fs.access(p); return { exists: true }; }
     catch { return { exists: false }; }
   });
+
+  ipcMain.handle('app:chooseExportPath', async (_e, suggestedName: string) => {
+    const win = getWindow();
+    if (!win) return { ok: false };
+    const r = await dialog.showSaveDialog(win, {
+      defaultPath: suggestedName,
+      filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
+    });
+    if (r.canceled || !r.filePath) return { ok: false };
+    return { ok: true, path: r.filePath };
+  });
 }

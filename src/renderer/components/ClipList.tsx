@@ -4,7 +4,7 @@ import { ClipEditor } from './ClipEditor';
 
 function fmt(s: number) { return s.toFixed(2); }
 
-export function ClipList() {
+export function ClipList({ onExport }: { onExport: (id: string) => void }) {
   const project = useProjectStore(s => s.project);
   const selectedId = useProjectStore(s => s.selectedClipId);
   const select = useProjectStore(s => s.selectClip);
@@ -44,9 +44,10 @@ export function ClipList() {
       </div>
       {selectedId && (
         <>
-          <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
             <button onClick={() => { const newId = dup(selectedId); if (newId) select(newId); }}>Duplicate</button>
             <button onClick={() => del(selectedId)}>Delete</button>
+            <button disabled={invalid.has(selectedId)} onClick={() => onExport(selectedId)}>Export clip…</button>
           </div>
           <ClipEditor clipId={selectedId} />
         </>

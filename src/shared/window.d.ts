@@ -19,6 +19,7 @@ declare global {
       exportSequence: (args: ExportSequenceArgs) => Promise<ExportResult>;
       cancelExport: (runId: string) => Promise<{ ok: boolean }>;
       checkPath: (p: string) => Promise<{ exists: boolean }>;
+      chooseExportPath: (suggestedName: string) => Promise<{ ok: boolean; path?: string }>;
       onExportProgress: (cb: (p: ExportProgress) => void) => () => void;
     };
   }
