@@ -4,9 +4,11 @@ import { Preview } from './components/Preview';
 import { Timeline } from './components/Timeline';
 import { ClipList } from './components/ClipList';
 import { Sequence } from './components/Sequence';
+import { MenuActions } from './components/MenuActions';
 
 export function App() {
   const project = useProjectStore(s => s.project);
+  const dirty = useProjectStore(s => s.dirty);
   const setSource = useProjectStore(s => s.setSource);
 
   async function handleOpen() {
@@ -19,8 +21,10 @@ export function App() {
     <div className="app">
       <div className="menubar">
         <strong>ReelMagic</strong>
+        <MenuActions />
         <button onClick={handleOpen}>Open video…</button>
         <span className="dim">{project ? project.sourceVideo.path : 'no source'}</span>
+        {dirty && <span className="dim">●</span>}
       </div>
       <div className="main">
         <div className="preview-wrap">
