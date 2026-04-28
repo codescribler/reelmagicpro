@@ -2,6 +2,7 @@ import React from 'react';
 import { useProjectStore } from './state/projectStore';
 import { Preview } from './components/Preview';
 import { Timeline } from './components/Timeline';
+import { ClipList } from './components/ClipList';
 
 export function App() {
   const project = useProjectStore(s => s.project);
@@ -29,7 +30,7 @@ export function App() {
         </div>
       </div>
       <div className="side">
-        <div style={{ padding: 12 }}><div className="dim">Clip list</div></div>
+        <ClipList />
       </div>
       <div className="seq"><span className="dim">Sequence</span></div>
     </div>
