@@ -5,14 +5,22 @@ import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 export function Preview() {
   const project = useProjectStore(s => s.project);
   const previewMode = useProjectStore(s => s.previewMode);
+  const setPreviewMode = useProjectStore(s => s.setPreviewMode);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(1);
+
+  const seqIndex = previewMode.kind === 'sequence' ? previewMode.index : -1;
 
   const activeClip = (() => {
     if (!project) return null;
     if (previewMode.kind === 'clip' || previewMode.kind === 'set-zoom') {
       return project.clips.find(c => c.id === previewMode.clipId) ?? null;
+    }
+    if (previewMode.kind === 'sequence') {
+      const entry = project.sequence[previewMode.index];
+      if (!entry) return null;
+      return project.clips.find(c => c.id === entry.clipId) ?? null;
     }
     return null;
   })();
@@ -41,29 +49,43 @@ export function Preview() {
       v.playbackRate = 1;
       v.muted = false;
     }
-  }, [activeClip?.speed, activeClip?.id]);
+  }, [activeClip?.speed, activeClip?.id, seqIndex]);
 
+  // Seek to clip in-point when entering a new clip OR new sequence index (even
+  // if it's the same clip id as the previous sequence entry).
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !activeClip) return;
-    if (v.currentTime < activeClip.in || v.currentTime > activeClip.out) {
-      v.currentTime = activeClip.in;
+    v.currentTime = activeClip.in;
+    if (previewMode.kind === 'sequence') {
+      v.play().catch(() => {});
     }
-  }, [activeClip?.id]);
+  }, [activeClip?.id, previewMode.kind, seqIndex]);
 
+  // On reaching clip.out, either pause (clip mode) or advance / end (sequence).
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !activeClip) return;
+    if (!v || !activeClip || !project) return;
     function onTime() {
-      if (!v || !activeClip) return;
+      if (!v || !activeClip || !project) return;
       if (v.currentTime >= activeClip.out) {
-        v.pause();
-        v.currentTime = activeClip.out;
+        if (previewMode.kind === 'sequence') {
+          const next = previewMode.index + 1;
+          if (next < project.sequence.length) {
+            setPreviewMode({ kind: 'sequence', index: next });
+          } else {
+            v.pause();
+            setPreviewMode({ kind: 'source' });
+          }
+        } else {
+          v.pause();
+          v.currentTime = activeClip.out;
+        }
       }
     }
     v.addEventListener('timeupdate', onTime);
     return () => v.removeEventListener('timeupdate', onTime);
-  }, [activeClip?.id, activeClip?.out]);
+  }, [activeClip?.id, activeClip?.out, previewMode.kind, seqIndex, project, setPreviewMode]);
 
   if (!project) return <span className="dim">Open a video to begin</span>;
 
