@@ -36,6 +36,7 @@ export async function exportClip(opts: {
 
   if (!r.ok) {
     try { await fs.unlink(outputPath); } catch {}
+    if (signal?.aborted) return { ok: false, error: 'Cancelled' };
     return { ok: false, error: r.stderrTail || `ffmpeg exited with code ${r.exitCode}` };
   }
   onProgress?.({ runId, phase: 'done', currentItem: 1, totalItems: 1, percent: 100 });
@@ -43,10 +44,6 @@ export async function exportClip(opts: {
 }
 
 export { buildConcatFfmpegArgs, buildConcatListContents };
-
-function partOutputDurationMs(clip: Clip): number {
-  return clipDurationMs(clip);
-}
 
 export async function exportSequence(opts: {
   runId: string;
@@ -64,11 +61,15 @@ export async function exportSequence(opts: {
   }
 
   const clipById = new Map(clips.map(c => [c.id, c]));
-  const items = sequence.map((entry, idx) => {
+  const items: { index: number; clip: Clip }[] = [];
+  for (let idx = 0; idx < sequence.length; idx++) {
+    const entry = sequence[idx]!;
     const clip = clipById.get(entry.clipId);
-    if (!clip) throw new Error(`Sequence references missing clip ${entry.clipId}`);
-    return { index: idx, clip };
-  });
+    if (!clip) {
+      return { ok: false, error: `Sequence references missing clip ${entry.clipId}` };
+    }
+    items.push({ index: idx, clip });
+  }
 
   const tempDir = path.join(os.tmpdir(), `reelmagic-export-${runId}`);
   await fs.mkdir(tempDir, { recursive: true });
@@ -87,7 +88,7 @@ export async function exportSequence(opts: {
       const args = buildClipFfmpegArgs(clip, source, partPath);
       const r = await runFfmpeg({
         args,
-        totalDurationMs: partOutputDurationMs(clip),
+        totalDurationMs: clipDurationMs(clip),
         signal,
         onProgress: (percent) => onProgress?.({
           runId, phase: 'rendering-part',
@@ -96,6 +97,7 @@ export async function exportSequence(opts: {
         }),
       });
       if (!r.ok) {
+        if (signal?.aborted) return { ok: false, error: 'Cancelled' };
         return { ok: false, error: r.stderrTail || `Part ${i + 1} failed (exit ${r.exitCode})` };
       }
     }
@@ -106,7 +108,7 @@ export async function exportSequence(opts: {
     await fs.writeFile(listPath, buildConcatListContents(partPaths), 'utf8');
 
     const concatArgs = buildConcatFfmpegArgs(listPath, outputPath);
-    const totalConcatMs = items.reduce((acc, it) => acc + partOutputDurationMs(it.clip), 0);
+    const totalConcatMs = items.reduce((acc, it) => acc + clipDurationMs(it.clip), 0);
 
     const r = await runFfmpeg({
       args: concatArgs,
@@ -121,6 +123,7 @@ export async function exportSequence(opts: {
 
     if (!r.ok) {
       try { await fs.unlink(outputPath); } catch {}
+      if (signal?.aborted) return { ok: false, error: 'Cancelled' };
       return { ok: false, error: r.stderrTail || `Concat failed (exit ${r.exitCode})` };
     }
 

@@ -33,8 +33,15 @@ export async function runFfmpeg(opts: RunOptions): Promise<RunResult> {
     });
 
     if (opts.signal) {
-      const onAbort = () => { try { child.kill('SIGKILL'); } catch {} };
-      opts.signal.addEventListener('abort', onAbort, { once: true });
+      if (opts.signal.aborted) {
+        try { child.kill('SIGKILL'); } catch {}
+      } else {
+        const onAbort = () => { try { child.kill('SIGKILL'); } catch {} };
+        opts.signal.addEventListener('abort', onAbort, { once: true });
+        const cleanup = () => opts.signal!.removeEventListener('abort', onAbort);
+        child.once('close', cleanup);
+        child.once('error', cleanup);
+      }
     }
 
     child.on('error', () => resolve({ ok: false, exitCode: null, stderrTail }));
