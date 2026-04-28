@@ -3,6 +3,7 @@ import path from 'path';
 import { registerIpc, abortAllExports } from './ipc';
 
 let mainWindow: BrowserWindow | null = null;
+let quitting = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -26,6 +27,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
-  abortAllExports();
+app.on('before-quit', (e) => {
+  if (quitting) return;
+  e.preventDefault();
+  quitting = true;
+  abortAllExports().finally(() => app.exit(0));
 });

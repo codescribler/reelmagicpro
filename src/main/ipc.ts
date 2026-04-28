@@ -8,10 +8,14 @@ import type {
   LoadProjectResult, ExportClipArgs, ExportSequenceArgs, ExportProgress,
 } from '../shared/types';
 
-const activeRuns = new Map<string, AbortController>();
+// Maps runId → { ctrl, finished } — finished is the IPC handler's promise so we
+// can await it on quit-time abort.
+const activeRuns = new Map<string, { ctrl: AbortController; finished: Promise<unknown> }>();
 
-export function abortAllExports(): void {
-  for (const [, ctrl] of activeRuns) ctrl.abort();
+export async function abortAllExports(): Promise<void> {
+  const all = Array.from(activeRuns.values());
+  for (const { ctrl } of all) ctrl.abort();
+  await Promise.allSettled(all.map(r => r.finished));
   activeRuns.clear();
 }
 
@@ -49,7 +53,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       await saveProject(args.project, target);
       return { ok: true, path: target };
     } catch (e: any) {
-      return { ok: false };
+      return { ok: false, error: e?.message ?? String(e) };
     }
   });
 
@@ -77,38 +81,44 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   ipcMain.handle('app:exportClip', async (_e, args: ExportClipArgs) => {
     const ctrl = new AbortController();
-    activeRuns.set(args.runId, ctrl);
-    try {
-      return await exportClip({
-        runId: args.runId, clip: args.clip, source: args.source, outputPath: args.outputPath,
-        onProgress: sendProgress, signal: ctrl.signal,
-      });
-    } catch (e: any) {
-      return { ok: false, error: e?.message ?? String(e) };
-    } finally {
-      activeRuns.delete(args.runId);
-    }
+    const work = (async () => {
+      try {
+        return await exportClip({
+          runId: args.runId, clip: args.clip, source: args.source, outputPath: args.outputPath,
+          onProgress: sendProgress, signal: ctrl.signal,
+        });
+      } catch (e: any) {
+        return { ok: false, error: e?.message ?? String(e) };
+      } finally {
+        activeRuns.delete(args.runId);
+      }
+    })();
+    activeRuns.set(args.runId, { ctrl, finished: work });
+    return work;
   });
 
   ipcMain.handle('app:exportSequence', async (_e, args: ExportSequenceArgs) => {
     const ctrl = new AbortController();
-    activeRuns.set(args.runId, ctrl);
-    try {
-      return await exportSequence({
-        runId: args.runId, clips: args.clips, sequence: args.sequence,
-        source: args.source, outputPath: args.outputPath,
-        onProgress: sendProgress, signal: ctrl.signal,
-      });
-    } catch (e: any) {
-      return { ok: false, error: e?.message ?? String(e) };
-    } finally {
-      activeRuns.delete(args.runId);
-    }
+    const work = (async () => {
+      try {
+        return await exportSequence({
+          runId: args.runId, clips: args.clips, sequence: args.sequence,
+          source: args.source, outputPath: args.outputPath,
+          onProgress: sendProgress, signal: ctrl.signal,
+        });
+      } catch (e: any) {
+        return { ok: false, error: e?.message ?? String(e) };
+      } finally {
+        activeRuns.delete(args.runId);
+      }
+    })();
+    activeRuns.set(args.runId, { ctrl, finished: work });
+    return work;
   });
 
   ipcMain.handle('app:cancelExport', async (_e, runId: string) => {
-    const ctrl = activeRuns.get(runId);
-    if (ctrl) ctrl.abort();
+    const entry = activeRuns.get(runId);
+    if (entry) entry.ctrl.abort();
     return { ok: true };
   });
 

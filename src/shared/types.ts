@@ -61,7 +61,7 @@ export type IpcChannel =
 
 export interface OpenSourceVideoResult { source: SourceMeta | null; error?: string; }
 export interface SaveProjectArgs { project: Project; suggestedPath?: string; }
-export interface SaveProjectResult { ok: boolean; path?: string; }
+export interface SaveProjectResult { ok: boolean; path?: string; error?: string; }
 export interface LoadProjectResult {
   ok: boolean;
   path?: string;

@@ -27,6 +27,8 @@ export function MenuActions() {
     if (r.ok && r.path) {
       useProjectStore.setState({ projectPath: r.path });
       markClean();
+    } else if (r.error) {
+      alert(`Couldn't save project: ${r.error}`);
     }
   }
 
@@ -35,19 +37,27 @@ export function MenuActions() {
     const r = await window.reelmagic.loadProject();
     if (r.ok && r.project) {
       const exists = await window.reelmagic.checkPath(r.project.sourceVideo.path);
+      let relinked = r.project;
+      let didRelink = false;
       if (!exists.exists) {
         alert(`Source not found at:\n${r.project.sourceVideo.path}\n\nPick the file to relink.`);
         const picked = await window.reelmagic.openSourceVideo();
         if (picked.source) {
-          r.project.sourceVideo = picked.source;
+          relinked = { ...r.project, sourceVideo: picked.source };
+          didRelink = true;
         }
       }
-      setProject(r.project, r.path ?? null);
+      setProject(relinked, r.path ?? null);
       if (r.invalidClipIds && r.invalidClipIds.length > 0) {
         useProjectStore.setState({ invalidClipIds: new Set(r.invalidClipIds) });
       }
       if (r.warnings && r.warnings.length > 0) {
         alert(r.warnings.join('\n'));
+      }
+      if (didRelink) {
+        // setProject set dirty: false — flip it because the loaded data no longer
+        // matches the saved file.
+        useProjectStore.setState({ dirty: true });
       }
     } else if (r.error) {
       alert(`Couldn't load project: ${r.error}`);

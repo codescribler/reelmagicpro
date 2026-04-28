@@ -12,11 +12,13 @@ export function ExportProgressModal() {
 
   if (!run && !result) return null;
 
+  const isCancelled = result?.ok === false && result.error === 'Cancelled';
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: 'var(--panel)', padding: 24, borderRadius: 8, minWidth: 360, border: '1px solid var(--border)' }}>
         <div style={{ fontSize: 16, marginBottom: 8 }}>
-          {result?.ok ? 'Export complete' : result?.ok === false ? 'Export failed' : 'Exporting…'}
+          {result?.ok ? 'Export complete' : isCancelled ? 'Export cancelled' : result?.ok === false ? 'Export failed' : 'Exporting…'}
         </div>
         {run && !result && (
           <div className="dim" style={{ marginBottom: 8 }}>
@@ -25,7 +27,7 @@ export function ExportProgressModal() {
           </div>
         )}
         {result?.ok && <div className="dim" style={{ marginBottom: 8 }}>{result.outputPath}</div>}
-        {result?.ok === false && <div className="dim" style={{ marginBottom: 8, color: 'var(--danger)' }}>{result.error}</div>}
+        {result?.ok === false && <div className="dim" style={{ marginBottom: 8, color: isCancelled ? 'var(--muted)' : 'var(--danger)' }}>{result.error}</div>}
         <div style={{ height: 6, background: 'var(--panel-2)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
           <div style={{ width: `${run?.percent ?? (result?.ok ? 100 : 0)}%`, height: '100%', background: 'var(--accent)' }} />
         </div>
