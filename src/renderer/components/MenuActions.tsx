@@ -34,6 +34,14 @@ export function MenuActions() {
     if (!await confirmDiscardIfDirty(dirty)) return;
     const r = await window.reelmagic.loadProject();
     if (r.ok && r.project) {
+      const exists = await window.reelmagic.checkPath(r.project.sourceVideo.path);
+      if (!exists.exists) {
+        alert(`Source not found at:\n${r.project.sourceVideo.path}\n\nPick the file to relink.`);
+        const picked = await window.reelmagic.openSourceVideo();
+        if (picked.source) {
+          r.project.sourceVideo = picked.source;
+        }
+      }
       setProject(r.project, r.path ?? null);
       if (r.invalidClipIds && r.invalidClipIds.length > 0) {
         useProjectStore.setState({ invalidClipIds: new Set(r.invalidClipIds) });

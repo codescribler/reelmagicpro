@@ -18,6 +18,7 @@ declare global {
       exportClip: (args: ExportClipArgs) => Promise<ExportResult>;
       exportSequence: (args: ExportSequenceArgs) => Promise<ExportResult>;
       cancelExport: (runId: string) => Promise<{ ok: boolean }>;
+      checkPath: (p: string) => Promise<{ exists: boolean }>;
       onExportProgress: (cb: (p: ExportProgress) => void) => () => void;
     };
   }

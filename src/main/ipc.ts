@@ -1,4 +1,5 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
+import fs from 'fs/promises';
 import { probeVideo } from './ffmpeg/probe';
 import { exportClip, exportSequence } from './ffmpeg/exporter';
 import { saveProject, loadProject } from './project/io';
@@ -104,5 +105,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const ctrl = activeRuns.get(runId);
     if (ctrl) ctrl.abort();
     return { ok: true };
+  });
+
+  ipcMain.handle('app:checkPath', async (_e, p: string) => {
+    try { await fs.access(p); return { exists: true }; }
+    catch { return { exists: false }; }
   });
 }
