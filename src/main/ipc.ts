@@ -10,6 +10,11 @@ import type {
 
 const activeRuns = new Map<string, AbortController>();
 
+export function abortAllExports(): void {
+  for (const [, ctrl] of activeRuns) ctrl.abort();
+  activeRuns.clear();
+}
+
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   const sendProgress = (p: ExportProgress) => getWindow()?.webContents.send('app:exportProgress', p);
 

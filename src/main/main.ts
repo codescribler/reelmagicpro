@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
-import { registerIpc } from './ipc';
+import { registerIpc, abortAllExports } from './ipc';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -24,4 +24,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  abortAllExports();
 });
