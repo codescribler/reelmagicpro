@@ -1,7 +1,7 @@
 import React from 'react';
 import { useProjectStore } from '../state/projectStore';
 
-export function Sequence() {
+export function Sequence({ onExportSequence }: { onExportSequence: () => void }) {
   const project = useProjectStore(s => s.project);
   const append = useProjectStore(s => s.appendToSequence);
   const reorder = useProjectStore(s => s.reorderSequence);
@@ -68,6 +68,11 @@ export function Sequence() {
         disabled={project.sequence.length === 0}
         onClick={() => setMode({ kind: 'sequence', index: 0 })}>
         Play sequence
+      </button>
+      <button
+        disabled={project.sequence.length === 0}
+        onClick={onExportSequence}>
+        Export sequence
       </button>
     </div>
   );

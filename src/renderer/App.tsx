@@ -39,6 +39,20 @@ export function App() {
     setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
   }
 
+  async function runSequenceExport() {
+    if (!project) return;
+    if (project.sequence.length === 0) return;
+    const out = await window.reelmagic.chooseExportPath('sequence.mp4');
+    if (!out.ok || !out.path) return;
+    const runId = 'r_' + Math.random().toString(36).slice(2, 10);
+    startRun(runId);
+    const r = await window.reelmagic.exportSequence({
+      runId, clips: project.clips, sequence: project.sequence,
+      source: project.sourceVideo, outputPath: out.path,
+    });
+    setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
+  }
+
   return (
     <div className="app">
       <div className="menubar">
@@ -60,7 +74,7 @@ export function App() {
         <ClipList onExport={runClipExport} />
       </div>
       <div className="seq">
-        <Sequence />
+        <Sequence onExportSequence={runSequenceExport} />
       </div>
       <ExportProgressModal />
     </div>
