@@ -1,5 +1,6 @@
 import React from 'react';
 import { useProjectStore } from '../state/projectStore';
+import { ClipEditor } from './ClipEditor';
 
 function fmt(s: number) { return s.toFixed(2); }
 
@@ -40,10 +41,13 @@ export function ClipList() {
         })}
       </div>
       {selectedId && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-          <button onClick={() => { const newId = dup(selectedId); if (newId) select(newId); }}>Duplicate</button>
-          <button onClick={() => del(selectedId)}>Delete</button>
-        </div>
+        <>
+          <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+            <button onClick={() => { const newId = dup(selectedId); if (newId) select(newId); }}>Duplicate</button>
+            <button onClick={() => del(selectedId)}>Delete</button>
+          </div>
+          <ClipEditor clipId={selectedId} />
+        </>
       )}
     </div>
   );
