@@ -1,5 +1,6 @@
 import React from 'react';
 import { useProjectStore } from './state/projectStore';
+import { Preview } from './components/Preview';
 
 export function App() {
   const project = useProjectStore(s => s.project);
@@ -20,7 +21,7 @@ export function App() {
       </div>
       <div className="main">
         <div className="preview-wrap">
-          {project ? <span className="dim">Preview</span> : <span className="dim">Open a video to begin</span>}
+          <Preview />
         </div>
         <div className="timeline-wrap">
           <span className="dim" style={{ padding: 8, display: 'block' }}>Timeline</span>
