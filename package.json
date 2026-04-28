@@ -10,7 +10,9 @@
     "dev:renderer": "vite",
     "dev": "npm run build:main && electron .",
     "test": "jest --selectProjects unit",
+    "pretest:integration": "node scripts/make-fixture.js",
     "test:integration": "jest --selectProjects integration",
+    "pretest:all": "node scripts/make-fixture.js",
     "test:all": "jest",
     "package": "npm run build && electron-builder"
   },
