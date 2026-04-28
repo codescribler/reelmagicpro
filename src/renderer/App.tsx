@@ -1,6 +1,7 @@
 import React from 'react';
 import { useProjectStore } from './state/projectStore';
 import { Preview } from './components/Preview';
+import { Timeline } from './components/Timeline';
 
 export function App() {
   const project = useProjectStore(s => s.project);
@@ -24,7 +25,7 @@ export function App() {
           <Preview />
         </div>
         <div className="timeline-wrap">
-          <span className="dim" style={{ padding: 8, display: 'block' }}>Timeline</span>
+          <Timeline />
         </div>
       </div>
       <div className="side">
