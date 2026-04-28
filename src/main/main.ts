@@ -1,8 +1,11 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
+import { registerIpc } from './ipc';
+
+let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     webPreferences: {
@@ -11,10 +14,13 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-  win.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
+  mainWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  registerIpc(() => mainWindow);
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
