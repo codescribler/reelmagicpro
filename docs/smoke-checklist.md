@@ -22,3 +22,19 @@ Run before each release.
 - [ ] Save Project. Quit app. Reopen. Open Project. Confirm state is restored.
 - [ ] Move source `.mp4` to a different location. Open Project. Confirm relink prompt.
 - [ ] Cancel an export mid-run. Confirm modal closes and no partial output remains.
+
+## Nudge controls
+
+- [ ] Open a clip. Press `,` and `.` repeatedly. Playhead advances/retreats by ~1 frame each press, clamped at clip in/out.
+- [ ] Press `Shift+,` and `Shift+.`. Playhead moves by 1 second each press, clamped at clip in/out.
+- [ ] Click the new buttons (`−1s`, `◀`, `▶`, `+1s`) under the preview. Playhead moves by the matching amount.
+- [ ] Existing `←` / `→` still skip by `skipSeconds`.
+
+## Pre-click nudge in track mode
+
+- [ ] Find or create a clip whose tracked player isn't visible at `clip.in`.
+- [ ] Add a focus marker. Click "Track". Confirm phase = `waiting-start` and the nudge button row appears under the status bar.
+- [ ] Press `.` / `Shift+.` / `→` (or click corresponding buttons) until the player is in frame.
+- [ ] Left-click on the player. Confirm playback starts at `trackingPlaybackRate` and the nudge row disappears.
+- [ ] Mouse-follow the player. Left-click again to stop. Confirm `marker.in` is at the nudged source-time (the marker is invisible before that, then animates).
+- [ ] Save the project. Reload it. Confirm `marker.in` is preserved.
