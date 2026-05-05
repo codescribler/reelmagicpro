@@ -3,7 +3,7 @@ import { useProjectStore } from '../state/projectStore';
 import { useSettings } from '../state/settings';
 import { previewClock } from '../state/previewClock';
 import { markerCentreAt } from '../state/markerPosition';
-import { clampPlayhead, snapToFrame } from '../state/playhead';
+import { clampPlayhead, frameStepSeconds, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 import { FocusPlaceOverlay } from './FocusPlaceOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
@@ -321,9 +321,10 @@ export function Preview() {
             </div>
           </>
         )}
-        {/* Skip ±5s controls. Sit on top of any click-to-play overlay so they
-            stay clickable, but hide during the editing modes (set-zoom etc.)
-            since those drive their own interactions. */}
+        {/* Nudge controls: configurable skipSeconds (← / →), 1 second
+            (Shift+, / Shift+.), and 1 frame (, / .). Sit on top of any click-
+            to-play overlay so they stay clickable, but hide during the editing
+            modes (set-zoom etc.) since those drive their own interactions. */}
         {!suspendZoom && (
           <div
             onMouseDown={e => e.stopPropagation()}
@@ -335,6 +336,26 @@ export function Preview() {
               onClick={e => { e.stopPropagation(); requestSkip(-skipSeconds); }}
               title={`Skip back ${skipSeconds} seconds (← arrow)`}>
               − {skipSeconds}s
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); requestSkip(-1); }}
+              title="Step back 1 second (Shift+,)">
+              −1s
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); requestSkip(-frameStepSeconds(project.sourceVideo.fps)); }}
+              title="Step back 1 frame (,)">
+              ◀
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); requestSkip(+frameStepSeconds(project.sourceVideo.fps)); }}
+              title="Step forward 1 frame (.)">
+              ▶
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); requestSkip(+1); }}
+              title="Step forward 1 second (Shift+.)">
+              +1s
             </button>
             <button
               onClick={e => { e.stopPropagation(); requestSkip(+skipSeconds); }}
