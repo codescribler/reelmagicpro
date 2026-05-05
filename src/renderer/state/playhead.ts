@@ -5,3 +5,14 @@ export function clampPlayhead(t: number, lo: number, hi: number): number {
   if (hi < lo) return lo;
   return Math.max(lo, Math.min(hi, t));
 }
+
+// Seconds per source frame at the given fps. Used to size the ±frame nudge.
+export function frameStepSeconds(fps: number): number {
+  return 1 / fps;
+}
+
+// Snap a playhead time to the nearest source-frame boundary. Avoids the
+// playhead drifting off-grid after several nudges due to floating-point drift.
+export function snapToFrame(t: number, fps: number): number {
+  return Math.round(t * fps) / fps;
+}
