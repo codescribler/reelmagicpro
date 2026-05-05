@@ -16,3 +16,30 @@ export function frameStepSeconds(fps: number): number {
 export function snapToFrame(t: number, fps: number): number {
   return Math.round(t * fps) / fps;
 }
+
+// Subset of KeyboardEvent we actually look at. Lets us unit-test the function
+// without constructing a full DOM event.
+export interface NudgeKeyEvent {
+  code: string;       // KeyboardEvent.code (physical key, e.g. 'Comma')
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+}
+
+// Returns the nudge delta in seconds for the new fine-grained shortcuts
+// (`,` / `.` with optional Shift), or null if the event doesn't match. Existing
+// arrow shortcuts (±skipSeconds) keep their current handling in App.tsx — this
+// function intentionally returns null for ArrowLeft/ArrowRight so callers can
+// fall through.
+export function keyToNudgeDelta(e: NudgeKeyEvent, fps: number): number | null {
+  if (e.ctrlKey || e.altKey || e.metaKey) return null;
+  switch (e.code) {
+    case 'Comma':
+      return e.shiftKey ? -1 : -frameStepSeconds(fps);
+    case 'Period':
+      return e.shiftKey ? +1 : +frameStepSeconds(fps);
+    default:
+      return null;
+  }
+}
