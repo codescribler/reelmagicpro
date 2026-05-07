@@ -195,10 +195,16 @@ export function App() {
         </div>
       </div>
       <div className="side">
-        <RightPanel onExport={runClipExport} />
+        <RightPanel
+          onExport={(id) => runClipExport(id, 'standard')}
+          onExportInstagram={(id) => runClipExport(id, 'instagram')}
+        />
       </div>
       <div className="seq">
-        <Sequence onExportSequence={runSequenceExport} />
+        <Sequence
+          onExportSequence={() => runSequenceExport('standard')}
+          onExportSequenceInstagram={() => runSequenceExport('instagram')}
+        />
       </div>
       <ExportProgressModal />
       {exportOpts && (
