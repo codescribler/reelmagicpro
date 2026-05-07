@@ -86,6 +86,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         return await exportClip({
           runId: args.runId, clip: args.clip, source: args.source, outputPath: args.outputPath,
           outro: args.outro,
+          format: args.format,
+          instagramOutroPath: args.instagramOutroPath,
           onProgress: sendProgress, signal: ctrl.signal,
         });
       } catch (e: any) {
@@ -106,6 +108,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
           runId: args.runId, clips: args.clips, sequence: args.sequence,
           source: args.source, outputPath: args.outputPath,
           outro: args.outro,
+          format: args.format,
+          instagramOutroPath: args.instagramOutroPath,
           onProgress: sendProgress, signal: ctrl.signal,
         });
       } catch (e: any) {
