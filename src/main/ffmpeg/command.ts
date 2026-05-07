@@ -266,6 +266,24 @@ function watermarkFilter(source: SourceMeta): string {
     + `:borderw=2:bordercolor=black@0.7`;
 }
 
+// Watermark sized for the IG canvas. The standard `watermarkFilter` scales
+// font size against source.height — fine for landscape (height is the short
+// dimension) but on portrait that gives an oversized 42px font. We scale
+// against the SHORTER dimension to keep the watermark visually consistent
+// with standard exports (~24px on a 1080×1920 IG canvas, matching ~24px on
+// a 1920×1080 standard export).
+export function instagramWatermarkFilter(width: number, height: number): string {
+  const text = escapeDrawtextLabel(WATERMARK_TEXT);
+  const shortDim = Math.min(width, height);
+  const fontSize = Math.max(14, Math.round(shortDim * 0.022));
+  const x = Math.round(width * 0.1);
+  const y = Math.max(12, Math.round(shortDim * 0.02));
+  return `drawtext=fontfile='${fontFilePath()}':text='${text}'`
+    + `:x=${x}:y=${y}`
+    + `:fontcolor=white:fontsize=${fontSize}`
+    + `:borderw=2:bordercolor=black@0.7`;
+}
+
 // Build args for re-encoding the outro into a part that matches the clip
 // parts (same resolution, codec, audio params, framerate, SAR) so the concat
 // step doesn't get a parameter mismatch — that mismatch was producing files

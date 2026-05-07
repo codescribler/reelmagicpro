@@ -314,3 +314,15 @@ test('marker coords are mapped through the zoom rect', () => {
     + "setpts=PTS-STARTPTS[v]"
   );
 });
+
+import { instagramWatermarkFilter } from '../../src/main/ffmpeg/command';
+
+test('instagramWatermarkFilter scales font size against the shorter dimension', () => {
+  const filter = instagramWatermarkFilter(1080, 1920);
+  expect(filter).toMatch(/fontsize=24/);
+  expect(filter).toMatch(/:x=108:/);
+  expect(filter).toMatch(/:y=22:/);
+  expect(filter).toContain("text='Made with reelmagicpro.co.uk'");
+  expect(filter).toContain('fontcolor=white');
+  expect(filter).toContain('borderw=2:bordercolor=black@0.7');
+});
