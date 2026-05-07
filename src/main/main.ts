@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { registerIpc, abortAllExports } from './ipc';
+import { initAutoUpdater } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let quitting = false;
@@ -25,6 +26,7 @@ function createWindow() {
 app.whenReady().then(() => {
   registerIpc(() => mainWindow);
   createWindow();
+  initAutoUpdater(() => mainWindow);
 });
 
 app.on('window-all-closed', () => {
