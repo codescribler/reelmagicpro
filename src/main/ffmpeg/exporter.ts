@@ -1,15 +1,77 @@
 import { runFfmpeg } from './runner';
-import { buildClipFfmpegArgs, buildOutroFfmpegArgs } from './command';
+import {
+  buildClipFfmpegArgs, buildOutroFfmpegArgs,
+  buildInstagramClipFfmpegArgs, buildInstagramOutroFfmpegArgs,
+} from './command';
 import {
   buildConcatFfmpegArgs, buildConcatListContents, buildFilterConcatFfmpegArgs,
 } from './concatList';
 import { probeVideo, probeHasAudio } from './probe';
 import type {
-  Clip, SourceMeta, ExportProgress, ExportResult, SequenceEntry, OutroSpec,
+  Clip, SourceMeta, ExportProgress, ExportResult, SequenceEntry, OutroSpec, ExportFormat,
 } from '../../shared/types';
+import { computeInstagramFraming } from '../../shared/instagramFraming';
+import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+
+// Build the clip-render ffmpeg args for the chosen format. Branches at the
+// arg-builder level so the standard pipeline stays byte-identical.
+function buildArgsForClip(
+  clip: Clip,
+  source: SourceMeta,
+  outputPath: string,
+  format: ExportFormat,
+): string[] {
+  if (format === 'instagram') {
+    const framing = computeInstagramFraming(clip, source);
+    return buildInstagramClipFfmpegArgs(clip, source, framing.samples, outputPath);
+  }
+  return buildClipFfmpegArgs(clip, source, outputPath);
+}
+
+// Synthetic "source" for the concat step so the IG output canvas is sized
+// correctly. The clip parts are already 1080×1920 once IG-rendered, but the
+// concat filter chain in concatList sizes its output canvas off this value.
+function concatSourceForFormat(source: SourceMeta, format: ExportFormat): SourceMeta {
+  if (format !== 'instagram') return source;
+  return { ...source, width: INSTAGRAM_REEL_WIDTH, height: INSTAGRAM_REEL_HEIGHT };
+}
+
+// Pick the outro to render for the chosen format. For Instagram exports we
+// prefer the IG-specific path (if set and the file exists); otherwise we fall
+// back to the standard outro letterboxed and emit a warning. Returns
+// { ok: true, none: true } when no outro should be appended.
+async function resolveOutroForFormat(opts: {
+  format: ExportFormat;
+  outro?: OutroSpec;
+  instagramOutroPath?: string;
+  onWarning?: (msg: string) => void;
+}): Promise<
+  | { ok: true; none?: false; spec: OutroSpec; durationMs: number; hasAudio: boolean }
+  | { ok: true; none: true }
+  | { ok: false; error: string }
+> {
+  const { format, outro, instagramOutroPath, onWarning } = opts;
+  if (format === 'instagram') {
+    if (instagramOutroPath) {
+      const r = await resolveOutro({ path: instagramOutroPath });
+      if (r.ok) {
+        return { ok: true, spec: { path: instagramOutroPath }, durationMs: r.durationMs, hasAudio: r.hasAudio };
+      }
+      onWarning?.('Instagram outro file not found — using standard outro letterboxed.');
+    }
+    if (!outro) return { ok: true, none: true };
+    const r = await resolveOutro(outro);
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, spec: outro, durationMs: r.durationMs, hasAudio: r.hasAudio };
+  }
+  if (!outro) return { ok: true, none: true };
+  const r = await resolveOutro(outro);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, spec: outro, durationMs: r.durationMs, hasAudio: r.hasAudio };
+}
 
 export type ProgressCb = (p: ExportProgress) => void;
 
@@ -79,11 +141,14 @@ async function renderOutroPart(opts: {
   outputPath: string;
   durationMs: number;
   hasAudio: boolean;
+  format: ExportFormat;
   signal?: AbortSignal;
   onProgress?: (percent: number) => void;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { outro, source, outputPath, durationMs, hasAudio, signal, onProgress } = opts;
-  const args = buildOutroFfmpegArgs(outro.path, source, outputPath, hasAudio);
+  const { outro, source, outputPath, durationMs, hasAudio, format, signal, onProgress } = opts;
+  const args = format === 'instagram'
+    ? buildInstagramOutroFfmpegArgs(outro.path, source, outputPath, hasAudio)
+    : buildOutroFfmpegArgs(outro.path, source, outputPath, hasAudio);
   const r = await runFfmpeg({ args, totalDurationMs: durationMs, signal, onProgress });
   if (!r.ok) {
     return { ok: false, error: r.stderrTail || `Outro render failed (exit ${r.exitCode})` };
@@ -97,21 +162,28 @@ export async function exportClip(opts: {
   source: SourceMeta;
   outputPath: string;
   outro?: OutroSpec;
+  format?: ExportFormat;
+  instagramOutroPath?: string;
   onProgress?: ProgressCb;
   signal?: AbortSignal;
 }): Promise<ExportResult> {
-  const { runId, clip, source, outputPath, outro, onProgress, signal } = opts;
+  const { runId, clip, source, outputPath, outro, instagramOutroPath, onProgress, signal } = opts;
+  const format: ExportFormat = opts.format ?? 'standard';
+
+  const resolved = await resolveOutroForFormat({
+    format, outro, instagramOutroPath,
+    onWarning: (msg) => onProgress?.({
+      runId, phase: 'rendering-part', currentItem: 1, totalItems: 1, percent: 0, message: msg,
+    }),
+  });
+  if (!resolved.ok) return { ok: false, error: resolved.error };
 
   // No outro: single-pass — encode straight to the user's output path.
-  if (!outro) {
-    return runSinglePassClip({ runId, clip, source, outputPath, onProgress, signal });
+  if (resolved.none) {
+    return runSinglePassClip({ runId, clip, source, outputPath, format, onProgress, signal });
   }
 
-  // With outro: validate first, then render clip + outro into a temp dir and
-  // concat-copy them to the output. Validating up front avoids burning a full
-  // clip render only to fail on a missing outro.
-  const resolved = await resolveOutro(outro);
-  if (!resolved.ok) return { ok: false, error: resolved.error };
+  const { spec: outroSpec, durationMs: outroDurationMs, hasAudio: outroHasAudio } = resolved;
 
   const tempDir = path.join(os.tmpdir(), `reelmagic-export-${runId}`);
   await fs.mkdir(tempDir, { recursive: true });
@@ -121,7 +193,7 @@ export async function exportClip(opts: {
     const clipRes = await renderClipPart({
       runId, clip, source, outputPath: clipPath,
       tempDir, scriptName: `fc-clip.txt`,
-      itemIndex: 1, totalItems, onProgress, signal,
+      itemIndex: 1, totalItems, format, onProgress, signal,
     });
     if (!clipRes.ok) {
       if (signal?.aborted) return { ok: false, error: 'Cancelled' };
@@ -132,8 +204,9 @@ export async function exportClip(opts: {
 
     const outroPartPath = path.join(tempDir, 'outro.mp4');
     const outroRes = await renderOutroPart({
-      outro, source, outputPath: outroPartPath,
-      durationMs: resolved.durationMs, hasAudio: resolved.hasAudio,
+      outro: outroSpec, source, outputPath: outroPartPath,
+      durationMs: outroDurationMs, hasAudio: outroHasAudio,
+      format,
       signal,
       onProgress: (percent) => onProgress?.({
         runId, phase: 'rendering-part', currentItem: 2, totalItems, percent,
@@ -149,9 +222,9 @@ export async function exportClip(opts: {
     const concatRes = await concatToOutput({
       partPaths: [clipPath, outroPartPath],
       outputPath, tempDir, runId,
-      totalDurationMs: clipDurationMs(clip) + resolved.durationMs,
+      totalDurationMs: clipDurationMs(clip) + outroDurationMs,
       itemIndex: totalItems, totalItems,
-      source,
+      source: concatSourceForFormat(source, format),
       filterConcat: true,
       onProgress, signal,
     });
@@ -169,12 +242,13 @@ async function runSinglePassClip(opts: {
   clip: Clip;
   source: SourceMeta;
   outputPath: string;
+  format: ExportFormat;
   onProgress?: ProgressCb;
   signal?: AbortSignal;
 }): Promise<ExportResult> {
-  const { runId, clip, source, outputPath, onProgress, signal } = opts;
+  const { runId, clip, source, outputPath, format, onProgress, signal } = opts;
   const totalDurationMs = clipDurationMs(clip);
-  const rawArgs = buildClipFfmpegArgs(clip, source, outputPath);
+  const rawArgs = buildArgsForClip(clip, source, outputPath, format);
   const { args, cleanup } = await spillLongFilter(
     rawArgs,
     os.tmpdir(),
@@ -215,11 +289,12 @@ async function renderClipPart(opts: {
   scriptName: string;
   itemIndex: number;
   totalItems: number;
+  format: ExportFormat;
   onProgress?: ProgressCb;
   signal?: AbortSignal;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { runId, clip, source, outputPath, tempDir, scriptName, itemIndex, totalItems, onProgress, signal } = opts;
-  const rawArgs = buildClipFfmpegArgs(clip, source, outputPath);
+  const { runId, clip, source, outputPath, tempDir, scriptName, itemIndex, totalItems, format, onProgress, signal } = opts;
+  const rawArgs = buildArgsForClip(clip, source, outputPath, format);
   const { args, cleanup } = await spillLongFilter(rawArgs, tempDir, scriptName);
   try {
     const r = await runFfmpeg({
@@ -290,10 +365,13 @@ export async function exportSequence(opts: {
   source: SourceMeta;
   outputPath: string;
   outro?: OutroSpec;
+  format?: ExportFormat;
+  instagramOutroPath?: string;
   onProgress?: ProgressCb;
   signal?: AbortSignal;
 }): Promise<ExportResult> {
-  const { runId, clips, sequence, source, outputPath, outro, onProgress, signal } = opts;
+  const { runId, clips, sequence, source, outputPath, outro, instagramOutroPath, onProgress, signal } = opts;
+  const format: ExportFormat = opts.format ?? 'standard';
 
   if (sequence.length === 0) {
     return { ok: false, error: 'Sequence is empty' };
@@ -312,12 +390,14 @@ export async function exportSequence(opts: {
 
   // Validate outro up front so a missing file fails fast — no point rendering
   // hundreds of frames of clip parts only to discover the appendix is broken.
-  let resolvedOutro: { durationMs: number; hasAudio: boolean } | null = null;
-  if (outro) {
-    const r = await resolveOutro(outro);
-    if (!r.ok) return { ok: false, error: r.error };
-    resolvedOutro = { durationMs: r.durationMs, hasAudio: r.hasAudio };
-  }
+  const resolvedOutro = await resolveOutroForFormat({
+    format, outro, instagramOutroPath,
+    onWarning: (msg) => onProgress?.({
+      runId, phase: 'rendering-part', currentItem: 1, totalItems: 1, percent: 0, message: msg,
+    }),
+  });
+  if (!resolvedOutro.ok) return { ok: false, error: resolvedOutro.error };
+  const outroSpec = resolvedOutro.none ? null : resolvedOutro;
 
   const tempDir = path.join(os.tmpdir(), `reelmagic-export-${runId}`);
   await fs.mkdir(tempDir, { recursive: true });
@@ -326,7 +406,7 @@ export async function exportSequence(opts: {
 
   try {
     // total = clip parts + (1 if outro) + 1 for concat
-    const totalItems = items.length + (resolvedOutro ? 1 : 0) + 1;
+    const totalItems = items.length + (outroSpec ? 1 : 0) + 1;
 
     for (let i = 0; i < items.length; i++) {
       if (signal?.aborted) return { ok: false, error: 'Cancelled' };
@@ -336,7 +416,7 @@ export async function exportSequence(opts: {
       const r = await renderClipPart({
         runId, clip, source, outputPath: partPath,
         tempDir, scriptName: `fc-part-${i}.txt`,
-        itemIndex: i + 1, totalItems,
+        itemIndex: i + 1, totalItems, format,
         onProgress, signal,
       });
       if (!r.ok) {
@@ -345,13 +425,14 @@ export async function exportSequence(opts: {
       }
     }
 
-    if (resolvedOutro && outro) {
+    if (outroSpec) {
       if (signal?.aborted) return { ok: false, error: 'Cancelled' };
       const outroPartPath = path.join(tempDir, 'outro.mp4');
       partPaths.push(outroPartPath);
       const r = await renderOutroPart({
-        outro, source, outputPath: outroPartPath,
-        durationMs: resolvedOutro.durationMs, hasAudio: resolvedOutro.hasAudio,
+        outro: outroSpec.spec, source, outputPath: outroPartPath,
+        durationMs: outroSpec.durationMs, hasAudio: outroSpec.hasAudio,
+        format,
         signal,
         onProgress: (percent) => onProgress?.({
           runId, phase: 'rendering-part',
@@ -368,14 +449,14 @@ export async function exportSequence(opts: {
 
     const totalConcatMs =
       items.reduce((acc, it) => acc + clipDurationMs(it.clip), 0)
-      + (resolvedOutro?.durationMs ?? 0);
+      + (outroSpec?.durationMs ?? 0);
 
     const concatRes = await concatToOutput({
       partPaths, outputPath, tempDir, runId,
       totalDurationMs: totalConcatMs,
       itemIndex: totalItems, totalItems,
-      source,
-      filterConcat: !!resolvedOutro,
+      source: concatSourceForFormat(source, format),
+      filterConcat: !!outroSpec || format === 'instagram',
       onProgress, signal,
     });
     if (!concatRes.ok) return concatRes;

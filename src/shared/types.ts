@@ -116,11 +116,17 @@ export interface OutroSpec {
   path: string;
 }
 
+export type ExportFormat = 'standard' | 'instagram';
+
 export interface ExportClipArgs {
   runId: string; clip: Clip; source: SourceMeta; outputPath: string;
   outro?: OutroSpec;
+  format?: ExportFormat;            // default 'standard'
+  instagramOutroPath?: string;      // optional; preferred over `outro` when format === 'instagram'
 }
 export interface ExportSequenceArgs {
   runId: string; clips: Clip[]; sequence: SequenceEntry[]; source: SourceMeta; outputPath: string;
   outro?: OutroSpec;
+  format?: ExportFormat;
+  instagramOutroPath?: string;
 }
