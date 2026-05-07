@@ -1,4 +1,4 @@
-import { pickDrivingMarker, buildRawSeries, gaussianSmoothSeries, clampSeriesToSource } from '../../src/shared/instagramFraming';
+import { pickDrivingMarker, buildRawSeries, gaussianSmoothSeries, clampSeriesToSource, computeInstagramFraming } from '../../src/shared/instagramFraming';
 import type { IgFramingSample } from '../../src/shared/instagramFraming';
 import type { Clip, FocusMarker, SourceMeta } from '../../src/shared/types';
 
@@ -165,4 +165,51 @@ test('clampSeriesToSource shrinks rect that exceeds source bounds, preserving as
   const out = clampSeriesToSource(input, SRC);
   expect(out[0]!.h).toBe(1080);
   expect(out[0]!.w).toBeCloseTo(1125 * (1080 / 2000), 3);
+});
+
+test('computeInstagramFraming with no markers returns static framing on focus-box centre', () => {
+  const r = computeInstagramFraming(clipWith([]), SRC);
+  expect(r.driverMarkerId).toBeNull();
+  expect(r.samples.length).toBeGreaterThanOrEqual(2);
+  expect(r.samples[0]!.cx).toBeCloseTo(960);
+});
+
+test('computeInstagramFraming with primary marker returns its id as driver', () => {
+  const marker: FocusMarker = {
+    id: 'mP', x: 200, y: 200, width: 80, height: 80, in: 0, out: 5,
+    color: 'yellow', primary: true,
+  };
+  const r = computeInstagramFraming(clipWith([m('m1'), marker]), SRC);
+  expect(r.driverMarkerId).toBe('mP');
+});
+
+test('computeInstagramFraming smooths a path-tracked marker', () => {
+  const marker: FocusMarker = {
+    id: 'm1', x: 0, y: 0, width: 100, height: 100, in: 0, out: 5, color: 'yellow',
+    path: Array.from({ length: 50 }, (_, i) => ({
+      t: i * 0.1,
+      cx: 960 + (i % 2 === 0 ? -50 : 50),
+      cy: 540,
+    })),
+  };
+  const r = computeInstagramFraming(clipWith([marker]), SRC);
+  for (const s of r.samples) expect(Math.abs(s.cx - 960)).toBeLessThan(20);
+});
+
+test('computeInstagramFraming thins to ≤ 40 segments', () => {
+  const marker: FocusMarker = {
+    id: 'm1', x: 0, y: 0, width: 100, height: 100, in: 0, out: 5, color: 'yellow',
+    path: Array.from({ length: 200 }, (_, i) => ({ t: i * 0.025, cx: 960, cy: 540 })),
+  };
+  const r = computeInstagramFraming(clipWith([marker]), SRC);
+  expect(r.samples.length).toBeLessThanOrEqual(41);
+});
+
+test('computeInstagramFraming clamps an off-edge marker centre', () => {
+  const marker: FocusMarker = {
+    id: 'm1', x: 0, y: 0, width: 80, height: 80, in: 0, out: 5, color: 'yellow',
+    path: [{ t: 0, cx: -100, cy: 540 }, { t: 5, cx: -100, cy: 540 }],
+  };
+  const r = computeInstagramFraming(clipWith([marker]), SRC);
+  for (const s of r.samples) expect(s.cx).toBeGreaterThanOrEqual(s.w / 2 - 0.001);
 });

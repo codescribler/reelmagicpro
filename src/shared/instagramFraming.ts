@@ -151,3 +151,39 @@ export function clampSeriesToSource(
     return { t: s.t, cx, cy, w, h };
   });
 }
+
+const MAX_SEGMENTS = 40;
+
+// Thin a series down to at most maxSegments segments, keeping the first and
+// last samples and picking ~evenly spaced points in between. Mirrors the
+// thinPathForExport helper in command.ts so the IG ffmpeg expression stays
+// compact regardless of the source path's density.
+function thinSeries(samples: IgFramingSample[], maxSegments: number): IgFramingSample[] {
+  if (samples.length <= maxSegments + 1) return samples;
+  const factor = Math.ceil((samples.length - 1) / maxSegments);
+  const out: IgFramingSample[] = [samples[0]!];
+  for (let i = factor; i < samples.length - 1; i += factor) out.push(samples[i]!);
+  out.push(samples[samples.length - 1]!);
+  return out;
+}
+
+// Public entry point. Pipeline: pick driver → build raw centre/size series →
+// Gaussian-smooth → clamp to source bounds → thin for compact downstream
+// expressions. Smoothing happens BEFORE clamping so the eased trajectory is
+// computed in unconstrained space and only then trimmed at the edges.
+export function computeInstagramFraming(
+  clip: Clip,
+  source: SourceMeta,
+  opts?: IgFramingOpts,
+): { samples: IgFramingSample[]; driverMarkerId: string | null } {
+  const o = withDefaults(opts);
+  const driver = pickDrivingMarker(clip);
+  const raw = buildRawSeries(clip, source, o);
+  const smoothed = gaussianSmoothSeries(raw, o.smoothingSigmaSeconds);
+  const clamped = clampSeriesToSource(smoothed, source);
+  const thinned = thinSeries(clamped, MAX_SEGMENTS);
+  return {
+    samples: thinned,
+    driverMarkerId: driver?.id ?? null,
+  };
+}
