@@ -348,3 +348,49 @@ test('buildInstagramOutroFfmpegArgs synthesises silent audio when source has non
   expect(args).toContain('anullsrc=cl=stereo:r=48000');
   expect(args).toContain('-shortest');
 });
+
+import { buildInstagramClipFfmpegArgs } from '../../src/main/ffmpeg/command';
+import { computeInstagramFraming } from '../../src/shared/instagramFraming';
+
+test('buildInstagramClipFfmpegArgs adds an IG crop+scale stage and IG watermark', () => {
+  const clip: Clip = { ...baseClip };
+  const framing = computeInstagramFraming(clip, source);
+  const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
+  const fcIdx = args.indexOf('-filter_complex');
+  const fc = args[fcIdx + 1]!;
+  expect(fc).toContain('crop=1920:1080:0:0,scale=1920:1080');
+  expect(fc.match(/crop=/g)?.length).toBe(2);
+  expect(fc).toContain('scale=1080:1920');
+  expect(fc).toMatch(/fontsize=24/);
+  const aspectIdx = args.indexOf('-aspect');
+  expect(args[aspectIdx + 1]).toBe('1080:1920');
+});
+
+test('buildInstagramClipFfmpegArgs preserves marker filters in the chain', () => {
+  const clip: Clip = {
+    ...baseClip,
+    focusMarkers: [
+      { id: 'm1', x: 100, y: 200, width: 80, height: 80, in: 12, out: 18, color: 'yellow' },
+    ],
+  };
+  const framing = computeInstagramFraming(clip, source);
+  const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
+  const fcIdx = args.indexOf('-filter_complex');
+  expect(args[fcIdx + 1]).toContain('drawbox=');
+});
+
+test('standard buildClipFfmpegArgs is byte-identical for a fixture clip (regression guard)', () => {
+  const args = buildClipFfmpegArgs(baseClip, source, '/out.mp4');
+  expect(args).toEqual([
+    '-y',
+    '-ss', '10', '-to', '20', '-i', '/in.mp4',
+    '-filter_complex', `[0:v]crop=1920:1080:0:0,scale=1920:1080,${expectedWatermark(source)},setpts=PTS-STARTPTS[v]`,
+    '-map', '[v]', '-map', '0:a?',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
+    '-movflags', '+faststart',
+    '-progress', 'pipe:2',
+    '/out.mp4',
+  ]);
+});

@@ -1,4 +1,5 @@
 import type { Clip, SourceMeta, FocusMarker } from '../../shared/types';
+import type { IgFramingSample } from '../../shared/instagramFraming';
 import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
 
 function fmt(n: number): string {
@@ -395,6 +396,65 @@ export function buildClipFfmpegArgs(
   const enc = [
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
     '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
+    '-movflags', '+faststart',
+    '-progress', 'pipe:2',
+  ];
+
+  return [...head, ...audioInput, ...fc, ...map, ...enc, outputPath];
+}
+
+// IG variant of buildClipFfmpegArgs. Pipeline:
+//   crop(zoom) → scale(srcW:srcH) → markers
+//     → crop(igX(t), igY(t), igW(t), igH(t))   // smoothed, time-varying
+//     → scale(IG_W:IG_H)
+//     → watermark (sized for IG canvas)
+//     → setpts → [v]
+//
+// The IG crop expressions are piecewise functions of `t` (clip-relative
+// seconds) — `crop` re-evaluates per frame, so this works directly. Coords
+// in `framingSamples` are SOURCE-PIXEL coords (matching marker.x/y); we
+// map them into post-zoom space the same way buildMarkerFilters does.
+export function buildInstagramClipFfmpegArgs(
+  clip: Clip,
+  source: SourceMeta,
+  framingSamples: IgFramingSample[],
+  outputPath: string,
+): string[] {
+  const z = clip.zoom;
+  const sx = source.width / z.width;
+  const sy = source.height / z.height;
+  const cxPts = framingSamples.map(s => ({ t: s.t, v: (s.cx - z.x) * sx }));
+  const cyPts = framingSamples.map(s => ({ t: s.t, v: (s.cy - z.y) * sy }));
+  const wPts  = framingSamples.map(s => ({ t: s.t, v: s.w * sx }));
+  const hPts  = framingSamples.map(s => ({ t: s.t, v: s.h * sy }));
+  const wExpr = piecewiseExpr(wPts);
+  const hExpr = piecewiseExpr(hPts);
+  const xExpr = `(${piecewiseExpr(cxPts)})-(${wExpr})/2`;
+  const yExpr = `(${piecewiseExpr(cyPts)})-(${hExpr})/2`;
+
+  const setpts = clip.speed === 1 ? 'PTS-STARTPTS' : `(PTS-STARTPTS)/${fmt(clip.speed)}`;
+  const markerFilters = buildMarkerFilters(clip, source);
+  const igWatermark = instagramWatermarkFilter(INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT);
+
+  const filter = `[0:v]crop=${fmt(z.width)}:${fmt(z.height)}:${fmt(z.x)}:${fmt(z.y)}`
+    + `,scale=${source.width}:${source.height}`
+    + (markerFilters ? `,${markerFilters}` : '')
+    + `,crop=w='${wExpr}':h='${hExpr}':x='${xExpr}':y='${yExpr}'`
+    + `,scale=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}`
+    + `,${igWatermark}`
+    + `,setpts=${setpts}[v]`;
+
+  const head = ['-y', '-ss', fmt(clip.in), '-to', fmt(clip.out), '-i', source.path];
+  const audioInput = clip.speed === 1 ? [] : ['-f', 'lavfi', '-i', 'anullsrc=cl=stereo:r=48000'];
+  const fc = ['-filter_complex', filter];
+  const map = clip.speed === 1
+    ? ['-map', '[v]', '-map', '0:a?']
+    : ['-map', '[v]', '-map', '1:a', '-shortest'];
+  const enc = [
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
+    '-pix_fmt', 'yuv420p',
+    '-aspect', `${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}`,
     '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
     '-movflags', '+faststart',
     '-progress', 'pipe:2',
