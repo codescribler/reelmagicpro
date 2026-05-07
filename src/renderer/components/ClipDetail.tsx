@@ -77,6 +77,7 @@ export function ClipDetail({ onExport, onExportInstagram }: {
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
           <button
             ref={exportBtnRef}
+            className="export-primary"
             disabled={isInv}
             onClick={() => onExport(clip.id)}>
             Export clip…

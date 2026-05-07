@@ -113,6 +113,18 @@ body {
   color: #d8f9b3 !important;
   font-weight: 600;
 }
+
+/* Permanent subtle green glow on the Export clip button — the destination we
+   want users to reach. Visible at rest; brightens on hover. The .btn-pulse
+   animation above takes over during the freshly-added clip flash. */
+.export-primary:not(:disabled) {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 1px var(--accent-glow), 0 0 8px 1px var(--accent-glow);
+}
+.export-primary:not(:disabled):hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-strong), 0 0 12px 2px var(--accent-strong);
+}
 .side > * { min-height: 0; }
 .seq {
   grid-area: seq;
