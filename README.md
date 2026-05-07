@@ -22,4 +22,40 @@ npm run test:integration  # integration tests (uses ffmpeg)
 npm run package           # produces installer in dist-app/
 ```
 
+## Release
+
+Releases are published to GitHub via the `Release` workflow. Pushing a `vX.Y.Z`
+tag triggers a Windows build and uploads `ReelMagic-Setup-X.Y.Z.exe`,
+`latest.yml`, and the blockmap as a **draft** release. Installed copies of the
+app auto-update from the latest non-draft release on next launch.
+
+1. Bump `version` in `package.json` (and run `npm install` so the lockfile updates).
+2. Commit on `master` and push.
+3. Tag and push:
+   ```
+   git tag v0.1.3
+   git push origin v0.1.3
+   ```
+4. Wait for the workflow to finish (`gh run watch` or check the Actions tab).
+5. Publish the draft release — `electron-updater` ignores drafts:
+   ```
+   gh release edit v0.1.3 --repo codescribler/reelmagicpro --draft=false
+   ```
+
+### Notes
+
+- **Tag must match `package.json` version.** electron-builder reads the
+  version from `package.json`, not the tag — a mismatch produces an installer
+  whose version doesn't match its tag and breaks the auto-updater.
+- **All electron-builder config lives in `electron-builder.yml`.** Do not add
+  a `build` field to `package.json` — it silently overrides the yml.
+- **Auto-update only works from a non-draft release.** Drafts are invisible
+  to `electron-updater`.
+- **Local dry-run** (uploads a draft straight from your machine — useful before
+  the first release of a new branch):
+  ```
+  $env:GH_TOKEN = "<PAT with repo scope>"
+  npm run release
+  ```
+
 See `docs/superpowers/specs/2026-04-28-reelmagic-video-editor-design.md` for the design.
