@@ -6,6 +6,7 @@ import { markerCentreAt } from '../state/markerPosition';
 import { clampPlayhead, frameStepSeconds, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
+import { InstagramCropOverlay } from './InstagramCropOverlay';
 
 export function Preview() {
   const project = useProjectStore(s => s.project);
@@ -20,6 +21,7 @@ export function Preview() {
   // their in/out times. Held in state so the JSX re-runs the visibility
   // filter every tick.
   const [tickTime, setTickTime] = useState(0);
+  const [showReelFrame, setShowReelFrame] = useState(false);
 
   const seqIndex = previewMode.kind === 'sequence' ? previewMode.index : -1;
 
@@ -369,6 +371,23 @@ export function Preview() {
               title={`Skip forward ${skipSeconds} seconds (→ arrow)`}>
               + {skipSeconds}s
             </button>
+            <button
+              onClick={e => { e.stopPropagation(); setShowReelFrame(v => !v); }}
+              title="Show / hide the 9:16 Instagram crop framing"
+              style={showReelFrame ? { background: 'var(--accent)', color: 'black' } : undefined}>
+              {showReelFrame ? '◻ Reel' : '▭ Reel'}
+            </button>
+          </div>
+        )}
+        {showReelFrame && activeClip && !suspendZoom && (
+          <div style={{
+            position: 'absolute', top: 0, left: 0,
+            width: dw, height: dh,
+            transformOrigin: '0 0',
+            transform: zoomTransform,
+            pointerEvents: 'none',
+          }}>
+            <InstagramCropOverlay clip={activeClip} source={project.sourceVideo} fit={fit} />
           </div>
         )}
         {isSetZoom && previewMode.kind === 'set-zoom' && (
