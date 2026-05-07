@@ -80,16 +80,27 @@ Three layers:
 - **Future tier opportunity:** £40-60/year with **intro/outro cards baked in** (the explicit wishlist feature). Position-specific templates (defender / midfielder / striker / GK) as a future hook.
 - **Backend requirement:** licence-checker API for signup, licence issuance, export tracking, and referral credit. Implementation: small backend (Cloudflare Worker + KV or Vercel + Postgres) called by the Electron app at export time.
 
-## Wishlist Features (drives v2 roadmap)
+## Built Feature Set (current as of 2026-05-07)
 
-Currently used in ReelMagic:
-- **Visual markers / static zoom** — the buyer's primary use of the existing feature set; "circle around the player" via cropping a wide Veo frame
+Features the buyer can rely on today, ordered roughly by importance to the JTBD:
 
-Wanted but not yet built:
+- **Focus markers with player tracking** — drop a marker on a player and follow them across the pitch with the cursor while the video plays at a tunable slow rate (default 0.5×). The outline animates along the recorded path on the preview *and* the exported reel. Each marker can be a rectangle or oval, in any of seven colours, with an optional name label. **This directly replaces the buyer's "extremely complicated" tracking pain in DaVinci.**
+- **Multiple markers per clip** — highlight more than one player in the same play (goalscorer + assist; defender + striker). Each marker has its own colour, shape, label, and visibility window.
+- **Focus box (static zoom)** — crop a wide Veo frame onto the action when tracking isn't needed; pulls every kid out of the wide-angle dot.
+- **Bookmarks** — single-pass scrub: hit B during playback, return later to cut clips from those moments. Maps directly to the buyer's *"bookmarking interesting plays"* phrase.
+- **Speed control + frame and second nudges** — slow skill moments down; step the playhead by exactly one frame or one second when marking precise in/out points.
+- **Sequence builder + single-file sequence export** — assemble a reel from multiple clips and export as one mp4.
+- **Brand outro append** — optional outro file appended to every export.
+- **Instagram (9:16 Reels) export with auto-tracking** — the same clip exports as a vertical Reel that auto-follows the marked player the whole way through with smoothed pan and zoom. Live preview canvas inside the export modal so framing is verified before render. Optional separate 9:16 outro file in settings (the standard outro is rescaled if no 9:16 version is provided).
+
+## Wishlist Features (drives next roadmap)
+
+Wanted, not yet built:
 - **Title / intro card** — name, age/DOB, position, jersey number, height, school year
 - **Outro / contact card** — coach name, club, contact email
-
-These are the v2 priorities for product-market fit with this buyer.
+- **Position-specific reel templates** — defender / midfielder / striker / GK
+- **Square (1:1) and Portrait (4:5) feed exports** — pipeline is already aspect-aware; adding presets is mechanical
+- **Per-clip Instagram framing override** — when the auto-track gets a moment wrong, manually nudge the IG crop on a clip without retracking the marker
 
 ## Distribution Channels (where to find them)
 

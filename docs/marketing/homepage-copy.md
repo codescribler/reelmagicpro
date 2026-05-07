@@ -89,18 +89,24 @@ The kids keep playing. The clips keep not getting made.
 ### What you get with ReelMagicPro
 
 **Built for football, not Hollywood**
-No timelines. No codecs. No audio panels. Just clip, zoom, slow it down, export.
+No timelines. No codecs. No audio panels. Just clip, mark, zoom, slow it down, export.
 
 **From a 90-minute Veo to a 90-second reel**
-Bookmark plays in one pass. Set the in and out points. Add the effects that matter — and only those.
+Bookmark plays in one pass. Set the in and out points. Add only the effects that matter.
 
-**Make them visible**
-The Veo wide frame shrinks every player to a dot. Static zoom puts your child front and centre, where the scout's eye lands first.
+**Track the focus player — no keyframes, no timeline panel**
+Drop a marker on your child mid-play and follow them across the pitch with the cursor while the video plays slow. The outline animates along their path on the preview *and* the exported reel. Add a label so the scout knows whose foot was on the ball. Highlight more than one player in the same clip if the moment calls for it — different colours, shapes (rectangle or oval), and names for each.
+
+**The focus box for static shots**
+When tracking isn't needed, the focus box still crops the wide Veo frame tight onto the action — every kid pulled out of the wide angle into the centre of the frame.
+
+**Instagram Reels, automatically framed**
+One click exports the same clip as a 9:16 Reel — the crop follows the marked player the whole way through with smoothed pan and zoom, no jumps. Live preview the framing inside the app before you render, then ship it straight to Instagram.
 
 **Your footage stays local**
 The match never uploads. Editing happens on your machine. Only an export count travels for licence checks — never the video.
 
-**Design note:** Four columns on desktop, stacked on mobile. One simple icon per benefit. Resist generic football stock imagery — keep it clean.
+**Design note:** Six benefit cards, two rows of three on desktop, stacked on mobile. One simple icon per benefit. Resist generic football stock imagery — keep it clean. The two marquee features (player tracking, Instagram Reels) deserve slightly bolder treatment — bigger card or a "New" pill — because they're the ones that defeat the buyer's existing tools.
 
 ---
 
@@ -126,11 +132,11 @@ ReelMagicPro is built by a parent of two academy-pathway boys — top tier of Wa
 **1. Drop in the match**
 Open the Veo download (or an iPhone clip). One file. No setup. No project wizards.
 
-**2. Bookmark the moments**
-Scrub through the match once. Mark every play that matters. Set in and out, zoom on them, slow the skill moments down. Duplicate a clip if you want a second angle.
+**2. Bookmark and edit the moments**
+Scrub through the match once and bookmark every play that matters. Cut clips from the bookmarks. Set in and out, drop the focus box on the action, and — if the player is moving — track them so the frame follows. Slow the skill moments down. Duplicate a clip if you want a second angle.
 
-**3. Export the reel**
-One clip, or the full sequence as a single mp4. Ready for Instagram, WhatsApp, or the scout's inbox.
+**3. Export the reel — landscape or Instagram Reel**
+One clip, or the full sequence as a single mp4. Pick standard 16:9 for the scout's inbox or WhatsApp, or pick the Instagram preset and the 9:16 crop is auto-framed around the tracked player. Both at the click of a button.
 
 **Design note:** Three numbered cards across the desktop view; stacked on mobile. Heading above: *"The Match-to-Reel Workflow."*
 
@@ -147,8 +153,11 @@ At ReelMagicPro, we know how it feels to lose an evening to DaVinci or hit a pay
 A 60-90 second product walkthrough showing:
 - Opening a Veo download
 - Bookmarking 3-4 plays
-- Setting in/out, zoom, slow-mo
-- Exporting and the finished reel playing on Instagram
+- Setting in/out, focus box, slow-mo
+- Tracking a moving player by following them with the mouse during slow playback (the marquee moment — show this clearly)
+- Adding a second marker on a different player to highlight the assist
+- Exporting once for the standard 16:9 reel, then again as a 9:16 Instagram Reel — and showing the cropped Reel auto-framing on the player as the action moves
+- The finished Reel playing on Instagram
 
 **Design note:** Embed below the explanatory paragraph. Until the video is recorded, replace with a single strong testimonial or a before/after still — *"Before: Veo wide frame. After: scout-ready zoom on him."*
 
@@ -228,6 +237,9 @@ Bottom strip: © 2026 ReelMagicPro · Built by a football dad
 3. Every Veo Deserves a Showreel.
 4. Stop Letting Their Best Matches Go Unseen.
 5. Match-to-Reel for Football Dads. First One's on Us.
+6. Drop a Marker. The Frame Follows. *(tracking-led)*
+7. From Veo to Instagram — Auto-Framed. *(Reels-led)*
+8. Track Your Child. Without Becoming a Videographer. *(tracking + positioning)*
 
 ## Direct CTA variants
 1. **Make Your First Reel — Free** *(primary; freemium-led; £25/year unlocks unlimited)*
