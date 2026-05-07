@@ -168,7 +168,7 @@ A 60-90 second product walkthrough showing:
 ### Try it free. Pay if you love it.
 
 **Free**
-- Your first reel is free. No card. No trial timer. No watermark.
+- Your first reel is free. No card. No trial timer.
 - Refer another parent for **5 more free reels** — credited when they make their first one.
 - Email signup only. Match footage never leaves your machine.
 
@@ -261,7 +261,6 @@ Drawn directly from the buyer profile's anti-features. Build review must verify 
 - [ ] No "free to try, paywall on export" trickery — pricing visible upfront; free first reel is genuinely free (no surprise paywall after time invested)
 - [ ] No card required to make the free first reel — email signup only
 - [ ] No cloud upload of match footage — only an export-count licence check ever travels
-- [ ] No watermarks on output reels — call this out as a positive on the page
 - [ ] No exposed codec / framerate / resolution settings — the app picks sensible defaults silently
 - [ ] No AI features added without consent
 - [ ] First-export expectation set clearly — *"this is your free reel; refer a parent or upgrade £25/year for more"* — to avoid recreating the CapCut bait-and-switch
@@ -279,3 +278,4 @@ Drawn directly from the buyer profile's anti-features. Build review must verify 
 6. Stripe integration for the £25/year upgrade flow
 7. Email confirmation + welcome flow on signup — referral code, link to download, "your first reel is on us" framing
 8. Privacy policy reflecting email-only data collection (no footage, just licence metadata)
+9. **Watermark decision.** Shipping app burns a small *"Made with reelmagicpro.co.uk"* credit into every export (top-left). Earlier copy promised *"no watermark"* — that promise has been removed pending a decision: keep the credit (and frame it honestly in copy), drop it from the code, or make it free-tier-only / paid-tier-removable.

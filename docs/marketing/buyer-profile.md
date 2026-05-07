@@ -65,8 +65,9 @@ Three layers:
 - **Account / login required for value delivery** — *softened* by the freemium decision: email-only signup is acceptable for licence tracking and the free tier, but should be the lightest possible (no password if magic-link works, no pre-ticked marketing boxes)
 - **Codec / framerate settings exposed** — the DaVinci trap
 - **AI features I didn't ask for** — feature bloat
-- **Watermarks on the output** — undermines the scout-facing professionalism
 - **Surprise paywalls after time invested** — the free first reel is genuinely free; expectations about the second export must be set explicitly during the first one
+
+> **Watermark note (2026-05-07):** the shipping app currently burns a small *"Made with reelmagicpro.co.uk"* credit into every export (top-left, ~2% of frame height). The earlier version of this profile listed *"watermarks on the output"* as an anti-feature. Decide before launch whether the credit stays (and gets framed honestly in the website copy as a small product credit, not a scout-facing logo overlay), is removed entirely, or is gated to the free tier only. The website copy currently does not promise *"no watermark"* — that promise has been removed pending this decision.
 
 ## Pricing Model & Willingness to Pay
 
