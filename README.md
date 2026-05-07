@@ -29,6 +29,12 @@ tag triggers a Windows build and uploads `ReelMagic-Setup-X.Y.Z.exe`,
 `latest.yml`, and the blockmap as a **draft** release. Installed copies of the
 app auto-update from the latest non-draft release on next launch.
 
+**Windows-only for now.** macOS builds are not produced. Adding them is
+straightforward (`macos-latest` job + `.icns` icon) but not worth doing until we
+enrol in the Apple Developer Program ($99/yr) — without code signing **and**
+notarization, macOS auto-update does not work and Gatekeeper blocks the app on
+first launch. See "Adding macOS later" below.
+
 1. Bump `version` in `package.json` (and run `npm install` so the lockfile updates).
 2. Commit on `master` and push.
 3. Tag and push:
@@ -57,5 +63,24 @@ app auto-update from the latest non-draft release on next launch.
   $env:GH_TOKEN = "<PAT with repo scope>"
   npm run release
   ```
+
+### Adding macOS later
+
+When ready, you'll need:
+
+- Apple Developer Program enrolment ($99/yr).
+- A "Developer ID Application" certificate exported as `.p12`, stored as
+  `MAC_CERTS` (base64) and `MAC_CERTS_PASSWORD` repo secrets.
+- An app-specific password from appleid.apple.com, plus your Apple ID email and
+  Team ID, stored as `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
+- A `build/icon.icns` (1024×1024 multi-resolution). Generate from the existing
+  PNG with `iconutil` on a Mac, or `electron-icon-builder` cross-platform.
+- A `macos-latest` job in `.github/workflows/release.yml` that runs the same
+  `npm run release` with those env vars set.
+
+Without notarization, users see a Gatekeeper warning ("Apple cannot check it
+for malicious software") on first launch, and `electron-updater` refuses to
+apply updates. Sign-without-notarize is all pain and no gain — go straight to
+notarized when you do this.
 
 See `docs/superpowers/specs/2026-04-28-reelmagic-video-editor-design.md` for the design.
