@@ -38,3 +38,14 @@ Run before each release.
 - [ ] Left-click on the player. Confirm playback starts at `trackingPlaybackRate` and the nudge row disappears.
 - [ ] Mouse-follow the player. Left-click again to stop. Confirm `marker.in` is at the nudged source-time (the marker is invisible before that, then animates).
 - [ ] Save the project. Reload it. Confirm `marker.in` is preserved.
+
+## Instagram export
+
+- [ ] In a project with at least one focus marker that has a recorded path, toggle "Reel" on the preview chrome. The 9:16 white rectangle should follow the marker centre as you scrub and play.
+- [ ] Click Export clip… for a tracked clip → ExportOptionsModal opens. Pick Instagram. The driver-summary line should read "Following marker: '<label>' (tracked, <duration>s)". The IG preview canvas should play the cropped output, centred on the marker.
+- [ ] Click 📸 Reel… (the dedicated button) — the modal opens with Instagram pre-selected.
+- [ ] Toggle the primary star on a non-first marker — open the IG export modal again and confirm the driver summary updates to that marker's label.
+- [ ] Save the project, reload it. The primary marker flag persists.
+- [ ] Settings → set an Instagram outro file to a missing path. Run an IG export → it should succeed (with the standard outro letterboxed if one is set, else single-pass IG render).
+- [ ] Run an IG export with no markers on the clip → succeeds; framing is the focus-box centre, static.
+- [ ] Verify the IG output file is 1080×1920 (right-click → Properties on Windows, or `ffprobe`).
