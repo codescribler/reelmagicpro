@@ -16,6 +16,9 @@ export interface Settings {
   // Playback speed used while recording a focus marker's track. Lower speeds
   // make fast action easier to follow with the cursor.
   trackingPlaybackRate: number;
+  // Optional path to a 9:16 outro to append to Instagram exports. When unset,
+  // the standard outro (if any) is rescaled with black bars top/bottom.
+  instagramOutroPath?: string;
 }
 
 const STORAGE_KEY = 'reelmagic.settings';
@@ -35,6 +38,7 @@ function loadSaved(): Settings {
       bookmarkRewindSeconds: numberOr(parsed.bookmarkRewindSeconds, defaults.bookmarkRewindSeconds),
       skipSeconds: numberOr(parsed.skipSeconds, defaults.skipSeconds),
       trackingPlaybackRate: numberOr(parsed.trackingPlaybackRate, defaults.trackingPlaybackRate),
+      instagramOutroPath: typeof parsed.instagramOutroPath === 'string' ? parsed.instagramOutroPath : undefined,
     };
   } catch {
     return defaults;
@@ -56,6 +60,9 @@ export const useSettings = create<SettingsState>((set) => ({
       bookmarkRewindSeconds: patch.bookmarkRewindSeconds ?? state.bookmarkRewindSeconds,
       skipSeconds: patch.skipSeconds ?? state.skipSeconds,
       trackingPlaybackRate: patch.trackingPlaybackRate ?? state.trackingPlaybackRate,
+      // 'in patch' so passing { instagramOutroPath: undefined } can clear the
+      // value rather than the spread keeping the prior path.
+      instagramOutroPath: 'instagramOutroPath' in patch ? patch.instagramOutroPath : state.instagramOutroPath,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
     return next;
