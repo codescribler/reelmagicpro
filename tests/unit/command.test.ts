@@ -326,3 +326,25 @@ test('instagramWatermarkFilter scales font size against the shorter dimension', 
   expect(filter).toContain('fontcolor=white');
   expect(filter).toContain('borderw=2:bordercolor=black@0.7');
 });
+
+import { buildInstagramOutroFfmpegArgs } from '../../src/main/ffmpeg/command';
+
+test('buildInstagramOutroFfmpegArgs scales/pads to 1080x1920 with audio passthrough', () => {
+  const src: SourceMeta = { path: '/in.mp4', duration: 100, width: 1920, height: 1080, fps: 30 };
+  const args = buildInstagramOutroFfmpegArgs('/outro.mp4', src, '/out.mp4', true);
+  const fcIdx = args.indexOf('-filter_complex');
+  expect(args[fcIdx + 1]).toContain('scale=1080:1920:force_original_aspect_ratio=decrease');
+  expect(args[fcIdx + 1]).toContain('pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black');
+  expect(args[fcIdx + 1]).toContain('fps=30');
+  expect(args[fcIdx + 1]).toContain('setsar=1');
+  const aspectIdx = args.indexOf('-aspect');
+  expect(args[aspectIdx + 1]).toBe('1080:1920');
+  expect(args).not.toContain('anullsrc=cl=stereo:r=48000');
+});
+
+test('buildInstagramOutroFfmpegArgs synthesises silent audio when source has none', () => {
+  const src: SourceMeta = { path: '/in.mp4', duration: 100, width: 1920, height: 1080, fps: 30 };
+  const args = buildInstagramOutroFfmpegArgs('/outro.mp4', src, '/out.mp4', false);
+  expect(args).toContain('anullsrc=cl=stereo:r=48000');
+  expect(args).toContain('-shortest');
+});

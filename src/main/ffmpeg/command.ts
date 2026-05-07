@@ -1,4 +1,5 @@
 import type { Clip, SourceMeta, FocusMarker } from '../../shared/types';
+import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
 
 function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : String(parseFloat(n.toFixed(6)));
@@ -323,6 +324,43 @@ export function buildOutroFfmpegArgs(
     // like 2025:2024 to satisfy a non-square input's exact DAR, which then
     // mismatches the clip parts (SAR 1:1) and crashes the concat filter.
     '-aspect', `${source.width}:${source.height}`,
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
+    '-movflags', '+faststart',
+    '-progress', 'pipe:2',
+  ];
+
+  return [...head, ...audioInput, ...fc, ...map, ...enc, outputPath];
+}
+
+// IG variant of buildOutroFfmpegArgs. The outro file is letterboxed/scaled
+// to fit 1080×1920. Used both when the user has set a 9:16 outro file (it
+// already fits — the scale+pad is a no-op effectively) and when we're
+// reusing the standard 16:9 outro for the IG export (it gets rescaled with
+// black bars top and bottom).
+export function buildInstagramOutroFfmpegArgs(
+  outroPath: string,
+  source: SourceMeta,
+  outputPath: string,
+  hasAudio: boolean,
+): string[] {
+  const fps = fmt(source.fps);
+  const filter = `[0:v]scale=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}:force_original_aspect_ratio=decrease`
+    + `,pad=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black`
+    + `,fps=${fps},setsar=1`
+    + `,setpts=PTS-STARTPTS[v]`;
+
+  const head = ['-y', '-i', outroPath];
+  const audioInput = hasAudio ? [] : ['-f', 'lavfi', '-i', 'anullsrc=cl=stereo:r=48000'];
+  const fc = ['-filter_complex', filter];
+  const map = hasAudio
+    ? ['-map', '[v]', '-map', '0:a']
+    : ['-map', '[v]', '-map', '1:a', '-shortest'];
+  const enc = [
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
+    '-pix_fmt', 'yuv420p',
+    '-r', fps,
+    '-vsync', 'cfr',
+    '-aspect', `${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}`,
     '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
     '-movflags', '+faststart',
     '-progress', 'pipe:2',
