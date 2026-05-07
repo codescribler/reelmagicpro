@@ -1,17 +1,30 @@
 :root {
-  --bg: #1d1f23;
-  --panel: #25282d;
-  --panel-2: #2d3137;
+  --bg: #1a1c20;
+  --panel: #23262b;
+  --panel-2: #2c2f35;
+  --panel-hover: #353a42;
   --text: #e8eaed;
   --muted: #8a8f98;
-  --accent: #5e9bff;
-  --accent-2: #2a5fbf;
+  /* Lime-green accent. --accent is the primary accent (focus rings, primary
+     buttons, current-item highlights, the playhead). --accent-2 is the muted
+     dark-green used for "selected" backgrounds where text sits on top.
+     --accent-glow / --accent-strong are low-alpha versions for panel
+     outlines and hover transitions. */
+  --accent: #6DD10D;
+  --accent-2: #2c5d08;
+  --accent-glow: rgba(109, 209, 13, 0.18);
+  --accent-strong: rgba(109, 209, 13, 0.45);
   --danger: #d04a4a;
-  --border: #3a3f47;
+  --border: #353940;
 }
 * { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
+html, body, #root { height: 100%; margin: 0; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 -apple-system, "Segoe UI", system-ui, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
 
 .app {
   display: grid;
@@ -22,21 +35,118 @@ body { background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans
     "main    side"
     "seq     seq";
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px;
+  gap: 6px;
 }
-.menubar { grid-area: menubar; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; gap: 12px; }
+
+.menubar {
+  grid-area: menubar;
+  background: var(--panel);
+  border: 1px solid var(--accent-glow);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 12px;
+  letter-spacing: 0.01em;
+}
 .main {
   grid-area: main;
   display: grid;
-  grid-template-rows: 1fr 96px;
+  grid-template-rows: 1fr 160px;
   background: var(--bg);
+  border: 1px solid var(--accent-glow);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
 }
 .preview-wrap { background: black; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
-.timeline-wrap { background: var(--panel); border-top: 1px solid var(--border); }
-.side { grid-area: side; background: var(--panel); border-left: 1px solid var(--border); overflow: auto; }
-.seq { grid-area: seq; background: var(--panel-2); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 8px 12px; gap: 8px; overflow-x: auto; }
+.timeline-wrap { background: var(--panel); border-top: 1px solid var(--border); overflow-y: auto; }
+.side {
+  grid-area: side;
+  background: var(--panel);
+  border: 1px solid var(--accent-glow);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.side > * { min-height: 0; }
+.seq {
+  grid-area: seq;
+  background: var(--panel-2);
+  border: 1px solid var(--accent-glow);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+  overflow-x: auto;
+}
 
-button { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px; cursor: pointer; }
-button:hover { background: #353a42; }
+button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+button:hover:not(:disabled) {
+  background: var(--panel-hover);
+  border-color: var(--accent-strong);
+}
+button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(109, 209, 13, 0.25);
+}
 button:disabled { opacity: 0.4; cursor: not-allowed; }
-button.primary { background: var(--accent-2); border-color: var(--accent); }
+button.primary {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #d8f9b3;
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled) {
+  background: #3a7a0c;
+  border-color: var(--accent);
+}
+
+input[type="text"], input[type="number"] {
+  font: inherit;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+input[type="text"]:focus-visible, input[type="number"]:focus-visible {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(109, 209, 13, 0.2);
+}
+
+/* Native scrollbars: dark and slim, with a green tint when hovered so they
+   feel part of the same palette. Webkit only — Electron uses Chromium so
+   this works. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #3a3f47;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-strong);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
 .dim { color: var(--muted); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.toast { animation: toast-in 200ms ease-out; }

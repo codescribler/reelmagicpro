@@ -12,8 +12,8 @@ test('exports a sequence concatenating two clips', async () => {
   const source = await probeVideo(FIXTURE);
   const out = path.join(os.tmpdir(), `rm-seq-${Date.now()}.mp4`);
   const clips = [
-    { id: 'c1', name: 'A', in: 0, out: 2, speed: 1, zoom: { x: 0, y: 0, width: source.width, height: source.height } },
-    { id: 'c2', name: 'B', in: 2, out: 4, speed: 0.5, zoom: { x: 0, y: 0, width: source.width, height: source.height } },
+    { id: 'c1', name: 'A', in: 0, out: 2, speed: 1, zoom: { x: 0, y: 0, width: source.width, height: source.height }, focusMarkers: [] },
+    { id: 'c2', name: 'B', in: 2, out: 4, speed: 0.5, zoom: { x: 0, y: 0, width: source.width, height: source.height }, focusMarkers: [] },
   ];
   const r = await exportSequence({
     runId: 's1',

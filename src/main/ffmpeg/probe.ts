@@ -27,6 +27,26 @@ export async function probeVideo(filePath: string): Promise<SourceMeta> {
   };
 }
 
+// Whether the file has at least one audio stream. Used by the outro pipeline
+// so we know whether to map the outro's own audio or generate silence (the
+// concat demuxer needs every part to have the same stream layout).
+export async function probeHasAudio(filePath: string): Promise<boolean> {
+  const args = [
+    '-v', 'error',
+    '-select_streams', 'a:0',
+    '-show_entries', 'stream=codec_type',
+    '-of', 'json',
+    filePath,
+  ];
+  const out = await runProbe(ffprobeStatic.path, args);
+  try {
+    const data = JSON.parse(out);
+    return Array.isArray(data?.streams) && data.streams.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function runProbe(bin: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args);

@@ -108,13 +108,6 @@ export function App() {
     else if (r.error) alert(`Couldn't read this file: ${r.error}`);
   }
 
-  function currentOutroSpec(): { path: string } | undefined {
-    const s = useSettings.getState();
-    if (!s.outroEnabled) return undefined;
-    if (!s.outroPath.trim()) return undefined;
-    return { path: s.outroPath };
-  }
-
   async function runClipExport(clipId: string) {
     if (!project) return;
     const clip = project.clips.find(c => c.id === clipId);
@@ -125,7 +118,6 @@ export function App() {
     startRun(runId);
     const r = await window.reelmagic.exportClip({
       runId, clip, source: project.sourceVideo, outputPath: out.path,
-      outro: currentOutroSpec(),
     });
     setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
   }
@@ -140,7 +132,6 @@ export function App() {
     const r = await window.reelmagic.exportSequence({
       runId, clips: project.clips, sequence: project.sequence,
       source: project.sourceVideo, outputPath: out.path,
-      outro: currentOutroSpec(),
     });
     setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
   }

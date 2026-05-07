@@ -13,7 +13,7 @@ test('exports a clip at full frame, 1x speed', async () => {
   const out = path.join(os.tmpdir(), `rm-test-${Date.now()}.mp4`);
   const r = await exportClip({
     runId: 't1',
-    clip: { id: 'c1', name: 'A', in: 1, out: 3, speed: 1, zoom: { x: 0, y: 0, width: source.width, height: source.height } },
+    clip: { id: 'c1', name: 'A', in: 1, out: 3, speed: 1, zoom: { x: 0, y: 0, width: source.width, height: source.height }, focusMarkers: [] },
     source,
     outputPath: out,
   });
@@ -32,7 +32,7 @@ test('exports a half-speed clip with doubled duration', async () => {
   const out = path.join(os.tmpdir(), `rm-test-slow-${Date.now()}.mp4`);
   const r = await exportClip({
     runId: 't2',
-    clip: { id: 'c1', name: 'A', in: 1, out: 3, speed: 0.5, zoom: { x: 0, y: 0, width: source.width, height: source.height } },
+    clip: { id: 'c1', name: 'A', in: 1, out: 3, speed: 0.5, zoom: { x: 0, y: 0, width: source.width, height: source.height }, focusMarkers: [] },
     source,
     outputPath: out,
   });
@@ -48,7 +48,29 @@ test('exports a zoomed clip at source resolution', async () => {
   const out = path.join(os.tmpdir(), `rm-test-zoom-${Date.now()}.mp4`);
   const r = await exportClip({
     runId: 't3',
-    clip: { id: 'c1', name: 'A', in: 1, out: 2, speed: 1, zoom: { x: 40, y: 30, width: 160, height: 120 } },
+    clip: { id: 'c1', name: 'A', in: 1, out: 2, speed: 1, zoom: { x: 40, y: 30, width: 160, height: 120 }, focusMarkers: [] },
+    source,
+    outputPath: out,
+  });
+  expect(r.ok).toBe(true);
+  const probed = await probeVideo(out);
+  expect(probed.width).toBe(source.width);
+  expect(probed.height).toBe(source.height);
+  fs.unlinkSync(out);
+});
+
+test('exports a clip with a focus marker drawbox burned in', async () => {
+  const source = await probeVideo(FIXTURE);
+  const out = path.join(os.tmpdir(), `rm-test-marker-${Date.now()}.mp4`);
+  const r = await exportClip({
+    runId: 't4',
+    clip: {
+      id: 'c1', name: 'A', in: 1, out: 3, speed: 1,
+      zoom: { x: 0, y: 0, width: source.width, height: source.height },
+      focusMarkers: [
+        { id: 'm1', x: 40, y: 40, width: 80, height: 80, in: 1, out: 3, color: 'yellow' },
+      ],
+    },
     source,
     outputPath: out,
   });
