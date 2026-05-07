@@ -103,7 +103,7 @@ export function ZoomRegionOverlay({ clipId, sourceWidth, sourceHeight, displayWi
         borderRadius: 3, padding: '2px 8px', fontSize: 11,
         pointerEvents: 'none',
       }}>
-        Drag to pick a region. Aspect ratio is locked to the source so the image isn't stretched.
+        Drag to draw the focus box. Aspect ratio is locked so the image isn't stretched.
       </div>
       {drag && (() => {
         const x = Math.min(drag.x1, drag.x2);
@@ -119,7 +119,7 @@ export function ZoomRegionOverlay({ clipId, sourceWidth, sourceHeight, displayWi
         onMouseDown={e => e.stopPropagation()}
         style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 6 }}>
         <button onClick={cancel}>Cancel</button>
-        <button className="primary" disabled={!drag} onClick={confirm}>Confirm zoom</button>
+        <button className="primary" disabled={!drag} onClick={confirm}>Set focus box</button>
       </div>
     </div>
   );

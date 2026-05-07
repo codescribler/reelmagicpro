@@ -1,5 +1,6 @@
 import React from 'react';
 import { useProjectStore } from '../state/projectStore';
+import { loadProjectInteractive } from '../state/loadProject';
 
 async function confirmDiscardIfDirty(dirty: boolean): Promise<boolean> {
   if (!dirty) return true;
@@ -33,35 +34,7 @@ export function MenuActions() {
   }
 
   async function onLoad() {
-    if (!await confirmDiscardIfDirty(dirty)) return;
-    const r = await window.reelmagic.loadProject();
-    if (r.ok && r.project) {
-      const exists = await window.reelmagic.checkPath(r.project.sourceVideo.path);
-      let relinked = r.project;
-      let didRelink = false;
-      if (!exists.exists) {
-        alert(`Source not found at:\n${r.project.sourceVideo.path}\n\nPick the file to relink.`);
-        const picked = await window.reelmagic.openSourceVideo();
-        if (picked.source) {
-          relinked = { ...r.project, sourceVideo: picked.source };
-          didRelink = true;
-        }
-      }
-      setProject(relinked, r.path ?? null);
-      if (r.invalidClipIds && r.invalidClipIds.length > 0) {
-        useProjectStore.setState({ invalidClipIds: new Set(r.invalidClipIds) });
-      }
-      if (r.warnings && r.warnings.length > 0) {
-        alert(r.warnings.join('\n'));
-      }
-      if (didRelink) {
-        // setProject set dirty: false — flip it because the loaded data no longer
-        // matches the saved file.
-        useProjectStore.setState({ dirty: true });
-      }
-    } else if (r.error) {
-      alert(`Couldn't load project: ${r.error}`);
-    }
+    await loadProjectInteractive();
   }
 
   return (

@@ -11,6 +11,8 @@ import { MenuActions } from './components/MenuActions';
 import { ExportProgressModal } from './components/ExportProgressModal';
 import { ExportOptionsModal, ExportOptionsContext, ExportOptionsResult } from './components/ExportOptionsModal';
 import { SettingsModal } from './components/SettingsModal';
+import { EmptyState } from './components/EmptyState';
+import { loadProjectInteractive } from './state/loadProject';
 import type { ExportFormat } from '../shared/types';
 import logoUrl from './assets/reelmagic.png';
 
@@ -26,6 +28,10 @@ export function App() {
   const setSource = useProjectStore(s => s.setSource);
   const startRun = useProjectStore(s => s.startRun);
   const setExportResult = useProjectStore(s => s.setExportResult);
+  const clipCreatedToken = useProjectStore(s => s.clipCreatedToken);
+  const sequenceAppendToken = useProjectStore(s => s.sequenceAppendToken);
+  const sideRef = useRef<HTMLDivElement>(null);
+  const seqRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportOpts, setExportOpts] = useState<{
@@ -109,6 +115,39 @@ export function App() {
     return () => clearTimeout(id);
   }, [toast]);
 
+  // Flash the right panel border whenever a clip is added — so the just-
+  // created clip (which auto-selects into the side panel) doesn't appear
+  // silently in the periphery. Imperative classList toggle with a forced
+  // reflow restarts the CSS animation even when bumps land back-to-back.
+  useEffect(() => {
+    if (clipCreatedToken === 0) return;
+    const el = sideRef.current;
+    if (!el) return;
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+    const id = setTimeout(() => el.classList.remove('flash'), 1400);
+    return () => clearTimeout(id);
+  }, [clipCreatedToken]);
+
+  // Same trick for the sequence bar — the user clicks "+ Add to sequence"
+  // up in the clip detail and would otherwise have no idea the clip just
+  // landed at the bottom of the screen. rAF defers the flash one frame so
+  // it lands after the bar has rendered (it transitions from hidden / hint
+  // to full when the sequence becomes non-empty).
+  useEffect(() => {
+    if (sequenceAppendToken === 0) return;
+    const raf = requestAnimationFrame(() => {
+      const el = seqRef.current;
+      if (!el) return;
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 1400);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [sequenceAppendToken]);
+
   async function handleOpen() {
     const r = await window.reelmagic.openSourceVideo();
     if (r.source) setSource(r.source);
@@ -170,8 +209,33 @@ export function App() {
     setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
   }
 
+  if (!project) {
+    return (
+      <>
+        <EmptyState
+          onOpenVideo={handleOpen}
+          onOpenProject={loadProjectInteractive}
+        />
+        {/* Settings is still reachable in case the user wants to tweak prefs
+            before loading a video, but kept off-screen until invoked via
+            keyboard or a future affordance. */}
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      </>
+    );
+  }
+
+  // Sequence is a power feature: stitching multiple clips into one render.
+  // Hide it on first run (0–1 clips, no existing sequence) so the bottom bar
+  // doesn't burn 96px on something the user can't yet do anything with. Show
+  // a thin discovery stripe at exactly 1 clip so a returning user knows the
+  // feature exists.
+  const seqMode: 'full' | 'hint' | 'none' =
+    project.sequence.length > 0 || project.clips.length >= 2 ? 'full'
+      : project.clips.length === 1 ? 'hint'
+      : 'none';
+
   return (
-    <div className="app">
+    <div className="app" data-seq={seqMode}>
       <div className="menubar">
         <img
           src={logoUrl}
@@ -194,18 +258,25 @@ export function App() {
           <Timeline />
         </div>
       </div>
-      <div className="side">
+      <div className="side" ref={sideRef}>
         <RightPanel
           onExport={(id) => runClipExport(id, 'standard')}
           onExportInstagram={(id) => runClipExport(id, 'instagram')}
         />
       </div>
-      <div className="seq">
-        <Sequence
-          onExportSequence={() => runSequenceExport('standard')}
-          onExportSequenceInstagram={() => runSequenceExport('instagram')}
-        />
-      </div>
+      {seqMode === 'full' && (
+        <div className="seq" ref={seqRef}>
+          <Sequence
+            onExportSequence={() => runSequenceExport('standard')}
+            onExportSequenceInstagram={() => runSequenceExport('instagram')}
+          />
+        </div>
+      )}
+      {seqMode === 'hint' && (
+        <div className="seq-stripe" title="Make a 2nd clip and you can stitch them into one reel">
+          <span>✂ Make a 2nd clip to stitch them into one reel</span>
+        </div>
+      )}
       <ExportProgressModal />
       {exportOpts && (
         <ExportOptionsModal

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import type { Clip, FocusMarker } from '../../shared/types';
 
@@ -28,19 +28,20 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
 
   // Identify which marker drives Instagram framing for this clip.
   // Explicit primary wins; otherwise the first marker is the implicit driver.
-  // The star UI shows filled / half-faded / outline accordingly.
   const explicitPrimary = clip.focusMarkers.find(m => m.primary === true);
   const implicitPrimaryId = explicitPrimary
     ? explicitPrimary.id
     : (clip.focusMarkers[0]?.id ?? null);
 
+  // Star UI is only meaningful when there's a choice to make. With one
+  // marker, it's automatically primary — the star is just clutter and a
+  // question mark in the user's head.
+  const showPrimaryStar = clip.focusMarkers.length >= 2;
+
   function handleAdd() {
     if (!project) return;
     const sw = project.sourceVideo.width;
     const sh = project.sourceVideo.height;
-    // Default size — the user said this default is ideal. Track mode will set
-    // the position from where they click on the player, so the initial x/y
-    // here only matters if they cancel out of tracking before clicking.
     const w = Math.round(sw * 0.15);
     const h = Math.round(sh * 0.25);
     const m: FocusMarker = {
@@ -59,36 +60,45 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
   }
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span className="dim" style={{ fontSize: 11 }}>Focus markers ({clip.focusMarkers.length})</span>
-        <button onClick={handleAdd}>+ Add focus marker</button>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {clip.focusMarkers.map(m => (
-          <MarkerRow
-            key={m.id}
-            clip={clip}
-            marker={m}
-            sourceWidth={project?.sourceVideo.width ?? 1}
-            sourceHeight={project?.sourceVideo.height ?? 1}
-            implicitPrimary={!m.primary && m.id === implicitPrimaryId}
-            onUpdate={patch => updateMarker(clip.id, m.id, patch)}
-            onDelete={() => deleteMarker(clip.id, m.id)}
-            onTogglePrimary={() => togglePrimaryMarker(clip.id, m.id)}
-            onTrack={() => setMode({ kind: 'track-marker', clipId: clip.id, markerId: m.id })}
-            onClearPath={() => updateMarker(clip.id, m.id, { path: undefined })}
-          />
-        ))}
-      </div>
+    <div>
+      {clip.focusMarkers.length === 0 ? (
+        <>
+          <p className="dim" style={{ fontSize: 12, margin: '0 0 8px 0' }}>
+            Tag your kid in the video below. The tag follows them so the focus box and the Reel framing can stay on them.
+          </p>
+          <button className="primary" onClick={handleAdd} title="Tag a player and follow them with the mouse">
+            + Tag a player
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
+            {clip.focusMarkers.map(m => (
+              <MarkerRow
+                key={m.id}
+                clip={clip}
+                marker={m}
+                sourceWidth={project?.sourceVideo.width ?? 1}
+                sourceHeight={project?.sourceVideo.height ?? 1}
+                showPrimaryStar={showPrimaryStar}
+                implicitPrimary={!m.primary && m.id === implicitPrimaryId}
+                onUpdate={patch => updateMarker(clip.id, m.id, patch)}
+                onDelete={() => deleteMarker(clip.id, m.id)}
+                onTogglePrimary={() => togglePrimaryMarker(clip.id, m.id)}
+                onTrack={() => setMode({ kind: 'track-marker', clipId: clip.id, markerId: m.id })}
+                onClearPath={() => updateMarker(clip.id, m.id, { path: undefined })}
+              />
+            ))}
+          </div>
+          <button onClick={handleAdd} title="Tag another player">
+            + Tag another player
+          </button>
+        </>
+      )}
     </div>
   );
 }
 
-// Scale a marker proportionally around its centre, clamped to source bounds
-// and a minimum size. Path-based markers store their position on the path
-// rather than x/y, so we leave those fields alone — width/height changes are
-// picked up by both preview and export regardless.
 function scaleMarker(
   marker: FocusMarker, factor: number, sw: number, sh: number,
 ): Partial<FocusMarker> {
@@ -108,11 +118,12 @@ function scaleMarker(
   return { x: newX, y: newY, width: newW, height: newH };
 }
 
-function MarkerRow({ clip, marker, sourceWidth, sourceHeight, implicitPrimary, onUpdate, onDelete, onTogglePrimary, onTrack, onClearPath }: {
+function MarkerRow({ clip, marker, sourceWidth, sourceHeight, showPrimaryStar, implicitPrimary, onUpdate, onDelete, onTogglePrimary, onTrack, onClearPath }: {
   clip: Clip;
   marker: FocusMarker;
   sourceWidth: number;
   sourceHeight: number;
+  showPrimaryStar: boolean;
   implicitPrimary: boolean;
   onUpdate: (patch: Partial<FocusMarker>) => void;
   onDelete: () => void;
@@ -121,11 +132,13 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, implicitPrimary, o
   onClearPath: () => void;
 }) {
   const stripRef = useRef<HTMLDivElement>(null);
+  const [showMore, setShowMore] = useState(false);
 
   const clipDuration = clip.out - clip.in;
   const inPct = ((marker.in - clip.in) / clipDuration) * 100;
   const outPct = ((marker.out - clip.in) / clipDuration) * 100;
   const shape = marker.shape ?? 'rect';
+  const hasPath = !!(marker.path && marker.path.length > 0);
 
   function pixelToClipTime(clientX: number): number {
     const el = stripRef.current!;
@@ -162,97 +175,119 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, implicitPrimary, o
   }
 
   return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, padding: 6 }}>
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, padding: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <span style={{
           width: 12, height: 12,
           borderRadius: shape === 'oval' ? '50%' : 2,
           background: marker.color,
           border: '1px solid var(--border)',
+          flex: '0 0 auto',
         }} />
-        <button
-          onClick={onTogglePrimary}
-          title={marker.primary
-            ? 'Primary marker for Instagram framing — click to unset'
-            : implicitPrimary
-              ? 'First marker — drives Instagram framing by default. Click to make explicit.'
-              : 'Set as primary marker for Instagram framing'}
+        {showPrimaryStar && (
+          <button
+            onClick={onTogglePrimary}
+            title={marker.primary
+              ? 'Primary marker — Reel framing follows this player. Click to unset.'
+              : implicitPrimary
+                ? 'First tag — drives Reel framing by default. Click to make explicit.'
+                : 'Make this the primary tag — Reel framing will follow this player.'}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              opacity: marker.primary ? 1 : implicitPrimary ? 0.45 : 0.25,
+              fontSize: 14,
+              padding: '0 2px',
+              color: marker.primary ? 'var(--accent)' : 'var(--text)',
+              flex: '0 0 auto',
+            }}
+          >★</button>
+        )}
+        <input
+          placeholder="Label (e.g. Player 7)"
+          value={marker.label ?? ''}
+          onChange={e => onUpdate({ label: e.target.value })}
           style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            opacity: marker.primary ? 1 : implicitPrimary ? 0.45 : 0.25,
-            fontSize: 14,
-            padding: '0 2px',
-            color: marker.primary ? 'var(--accent)' : 'var(--text)',
+            flex: 1, minWidth: 0, padding: '4px 6px',
+            background: 'var(--panel-2)', color: 'var(--text)',
+            border: '1px solid var(--border)', borderRadius: 3, fontSize: 12,
           }}
-        >★</button>
-        <span className="dim" style={{ fontSize: 11, flex: 1 }}>
-          in {fmtTime(marker.in)} → out {fmtTime(marker.out)}
-        </span>
-        <select
-          value={shape}
-          onChange={e => onUpdate({ shape: e.target.value as 'rect' | 'oval' })}
-          title="Marker shape"
-          style={{ background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 3, fontSize: 11 }}>
-          <option value="rect">Rect</option>
-          <option value="oval">Oval</option>
-        </select>
-        <select
-          value={marker.color}
-          onChange={e => onUpdate({ color: e.target.value })}
-          style={{ background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 3, fontSize: 11 }}>
-          {MARKER_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-      <input
-        placeholder="Label (e.g. Player 7)"
-        value={marker.label ?? ''}
-        onChange={e => onUpdate({ label: e.target.value })}
-        style={{
-          width: '100%', padding: 4, marginBottom: 6,
-          background: 'var(--panel)', color: 'var(--text)',
-          border: '1px solid var(--border)', borderRadius: 3, fontSize: 12,
-        }}
-      />
-      <div ref={stripRef}
-        style={{ position: 'relative', height: 18, background: '#15171b', borderRadius: 3, marginBottom: 6 }}>
-        <div style={{
-          position: 'absolute', left: `${inPct}%`, width: `${outPct - inPct}%`,
-          top: 0, bottom: 0,
-          background: marker.color, opacity: 0.4,
-        }} />
-        <div onMouseDown={startDrag('in')}
-          title="Drag to set when the marker appears"
-          style={{
-            position: 'absolute', left: `${inPct}%`, top: -2, bottom: -2,
-            width: 6, marginLeft: -3,
-            background: marker.color, border: '1px solid black',
-            cursor: 'ew-resize',
-          }} />
-        <div onMouseDown={startDrag('out')}
-          title="Drag to set when the marker disappears"
-          style={{
-            position: 'absolute', left: `${outPct}%`, top: -2, bottom: -2,
-            width: 6, marginLeft: -3,
-            background: marker.color, border: '1px solid black',
-            cursor: 'ew-resize',
-          }} />
+        />
+        <button onClick={onDelete} title="Delete this tag" style={{ flex: '0 0 auto' }}>×</button>
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span className="dim" style={{ fontSize: 11 }}>Size</span>
-        <button onClick={() => resize(1 / SIZE_STEP)} title="Shrink marker">−</button>
-        <button onClick={() => resize(SIZE_STEP)} title="Enlarge marker">+</button>
-        <button onClick={onTrack} title="Re-track the player by moving your mouse while the video plays at 0.5×">
-          Track {marker.path && marker.path.length > 0 ? `(${marker.path.length} pts)` : ''}
+        <button
+          className={hasPath ? '' : 'primary'}
+          onClick={onTrack}
+          title={hasPath
+            ? 'Re-record the path: video plays at 0.5× and the tag follows your mouse'
+            : 'Play at 0.5× and follow the player with your mouse to record their path'}>
+          {hasPath ? `Re-record path (${marker.path!.length} pts)` : 'Follow with mouse'}
         </button>
-        {marker.path && marker.path.length > 0 && (
-          <button onClick={onClearPath} title="Remove the recorded motion path so the marker stays static">
-            Clear path
-          </button>
-        )}
-        <button onClick={onDelete}>Delete</button>
+        <button
+          onClick={() => setShowMore(v => !v)}
+          title="Show advanced options for this tag"
+          style={{ marginLeft: 'auto' }}>
+          More options {showMore ? '▴' : '▾'}
+        </button>
       </div>
+      {showMore && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+            <span className="dim" style={{ fontSize: 11 }}>Shape</span>
+            <select
+              value={shape}
+              onChange={e => onUpdate({ shape: e.target.value as 'rect' | 'oval' })}
+              style={{ background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 3, fontSize: 11 }}>
+              <option value="rect">Rect</option>
+              <option value="oval">Oval</option>
+            </select>
+            <span className="dim" style={{ fontSize: 11, marginLeft: 6 }}>Colour</span>
+            <select
+              value={marker.color}
+              onChange={e => onUpdate({ color: e.target.value })}
+              style={{ background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 3, fontSize: 11 }}>
+              {MARKER_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <span className="dim" style={{ fontSize: 11, marginLeft: 6 }}>Size</span>
+            <button onClick={() => resize(1 / SIZE_STEP)} title="Shrink tag">−</button>
+            <button onClick={() => resize(SIZE_STEP)} title="Enlarge tag">+</button>
+          </div>
+          <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>
+            Active from {fmtTime(marker.in)} to {fmtTime(marker.out)} — drag the handles to limit when the tag is shown.
+          </div>
+          <div ref={stripRef}
+            style={{ position: 'relative', height: 18, background: '#15171b', borderRadius: 3, marginBottom: 6 }}>
+            <div style={{
+              position: 'absolute', left: `${inPct}%`, width: `${outPct - inPct}%`,
+              top: 0, bottom: 0,
+              background: marker.color, opacity: 0.4,
+            }} />
+            <div onMouseDown={startDrag('in')}
+              title="Drag to set when the tag appears"
+              style={{
+                position: 'absolute', left: `${inPct}%`, top: -2, bottom: -2,
+                width: 6, marginLeft: -3,
+                background: marker.color, border: '1px solid black',
+                cursor: 'ew-resize',
+              }} />
+            <div onMouseDown={startDrag('out')}
+              title="Drag to set when the tag disappears"
+              style={{
+                position: 'absolute', left: `${outPct}%`, top: -2, bottom: -2,
+                width: 6, marginLeft: -3,
+                background: marker.color, border: '1px solid black',
+                cursor: 'ew-resize',
+              }} />
+          </div>
+          {hasPath && (
+            <button onClick={onClearPath} title="Remove the recorded path so the tag stays in one spot">
+              Clear path
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

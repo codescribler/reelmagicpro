@@ -1,19 +1,17 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
-import { useSettings } from '../state/settings';
 import { previewClock } from '../state/previewClock';
 import { markerCentreAt } from '../state/markerPosition';
-import { clampPlayhead, frameStepSeconds, snapToFrame } from '../state/playhead';
+import { clampPlayhead, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
 import { InstagramCropOverlay } from './InstagramCropOverlay';
+import { TransportBar } from './TransportBar';
 
 export function Preview() {
   const project = useProjectStore(s => s.project);
   const previewMode = useProjectStore(s => s.previewMode);
   const setPreviewMode = useProjectStore(s => s.setPreviewMode);
-  const requestSkip = useProjectStore(s => s.requestSkip);
-  const skipSeconds = useSettings(s => s.skipSeconds);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(1);
@@ -162,6 +160,30 @@ export function Preview() {
     };
   }, [activeClip?.id, activeClip?.in, activeClip?.out, previewMode.kind, seqIndex, project, setPreviewMode]);
 
+  // Keep the <video> element from holding keyboard focus. Clicking native
+  // controls (play, pause, scrub) focuses something inside the video's shadow
+  // DOM, and Chromium swallows keydown events from there before they reach
+  // our document-level capture listeners — the symptom is "press play, then
+  // [ / ] / B do nothing until you click off the video." Blurring on play /
+  // pause / focusin keeps focus on the body so shortcuts always fire.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const drop = () => {
+      // Defer one frame: the focus has often just moved into the shadow DOM
+      // synchronously with the click, and a same-tick blur can be ignored.
+      requestAnimationFrame(() => v.blur());
+    };
+    v.addEventListener('play', drop);
+    v.addEventListener('pause', drop);
+    v.addEventListener('focusin', drop);
+    return () => {
+      v.removeEventListener('play', drop);
+      v.removeEventListener('pause', drop);
+      v.removeEventListener('focusin', drop);
+    };
+  }, [project?.sourceVideo.path]);
+
   // Mirror the playhead into the shared previewClock so the Timeline's
   // "Set in / Set out from preview" buttons can read the current time, and
   // drive a state update so focus markers re-evaluate visibility / position.
@@ -243,7 +265,6 @@ export function Preview() {
         <video
           ref={videoRef}
           src={`file://${project.sourceVideo.path}`}
-          controls={!suspendZoom && !isZoomed}
           style={{
             position: 'absolute', top: 0, left: 0,
             width: dw, height: dh,
@@ -310,73 +331,28 @@ export function Preview() {
             })}
           </div>
         )}
-        {isZoomed && !suspendZoom && (
-          <>
-            <div
-              onClick={togglePlay}
-              title="Click to play/pause"
-              style={{
-                position: 'absolute', inset: 0, cursor: 'pointer',
-                background: 'transparent',
-              }}
-            />
-            <div style={{
-              position: 'absolute', top: 8, right: 8,
-              background: 'rgba(0,0,0,0.6)', color: 'var(--text)',
-              padding: '2px 8px', borderRadius: 3, fontSize: 11,
-              pointerEvents: 'none',
-            }}>
-              Zoom {zoomFactor.toFixed(1)}× — click to play/pause
-            </div>
-          </>
-        )}
-        {/* Nudge controls: configurable skipSeconds (← / →), 1 second
-            (Shift+, / Shift+.), and 1 frame (, / .). Sit on top of any click-
-            to-play overlay so they stay clickable, but hide during the editing
-            modes (set-zoom etc.) since those drive their own interactions. */}
+        {/* Click anywhere on the picture to play/pause. Stays under the
+            transport bar (lower z-index) so transport buttons keep their own
+            click handling. Hidden in set-zoom / track-marker so those modes
+            keep the picture as a drawing surface. */}
         {!suspendZoom && (
           <div
-            onMouseDown={e => e.stopPropagation()}
-            style={{
-              position: 'absolute', top: 8, left: 8,
-              display: 'flex', gap: 4, zIndex: 5,
-            }}>
-            <button
-              onClick={e => { e.stopPropagation(); requestSkip(-skipSeconds); }}
-              title={`Skip back ${skipSeconds} seconds (← arrow)`}>
-              − {skipSeconds}s
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); requestSkip(-1); }}
-              title="Step back 1 second (Shift+,)">
-              −1s
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); requestSkip(-frameStepSeconds(project.sourceVideo.fps)); }}
-              title="Step back 1 frame (,)">
-              ◀
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); requestSkip(+frameStepSeconds(project.sourceVideo.fps)); }}
-              title="Step forward 1 frame (.)">
-              ▶
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); requestSkip(+1); }}
-              title="Step forward 1 second (Shift+.)">
-              +1s
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); requestSkip(+skipSeconds); }}
-              title={`Skip forward ${skipSeconds} seconds (→ arrow)`}>
-              + {skipSeconds}s
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); setShowReelFrame(v => !v); }}
-              title="Show / hide the 9:16 Instagram crop framing"
-              style={showReelFrame ? { background: 'var(--accent)', color: 'black' } : undefined}>
-              {showReelFrame ? '◻ Reel' : '▭ Reel'}
-            </button>
+            onClick={togglePlay}
+            title="Click to play/pause"
+            className="play-overlay"
+          />
+        )}
+        {!suspendZoom && (
+          <button
+            className={`preview-corner-btn${showReelFrame ? ' active' : ''}`}
+            onClick={e => { e.stopPropagation(); setShowReelFrame(v => !v); }}
+            title="Show / hide the 9:16 Instagram crop framing">
+            {showReelFrame ? '◻ Reel' : '▭ Reel'}
+          </button>
+        )}
+        {isZoomed && !suspendZoom && (
+          <div className="zoom-indicator">
+            {zoomFactor.toFixed(1)}× zoom
           </div>
         )}
         {showReelFrame && activeClip && !suspendZoom && (
@@ -410,6 +386,7 @@ export function Preview() {
             displayHeight={dh}
           />
         )}
+        {!suspendZoom && <TransportBar videoRef={videoRef} />}
       </div>
     </div>
   );

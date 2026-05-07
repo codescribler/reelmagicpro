@@ -17,6 +17,16 @@ interface State {
   previewMode: PreviewMode;
   invalidClipIds: Set<string>;
 
+  // Bumped each time a clip is added. Subscribed to by App / ClipDetail to
+  // play a brief "look here" animation on the right panel and the export
+  // button so the just-created clip doesn't land silently in the corner.
+  clipCreatedToken: number;
+  // Bumped each time a clip is appended to the sequence. Drives a flash on
+  // the sequence bar so the user sees their clip land there — important
+  // because the bar lives at the bottom of the screen, far from where they
+  // clicked the button on the right panel.
+  sequenceAppendToken: number;
+
   setProject: (p: Project | null, path?: string | null) => void;
   setProjectPath: (path: string | null) => void;
   markClean: () => void;
@@ -87,6 +97,8 @@ export const useProjectStore = create<State>((set, get) => ({
   selectedClipId: null,
   previewMode: { kind: 'idle' },
   invalidClipIds: new Set(),
+  clipCreatedToken: 0,
+  sequenceAppendToken: 0,
 
   setProject: (p, path) => set({
     // Normalize on entry so older project files (or a stale main bundle
@@ -108,6 +120,7 @@ export const useProjectStore = create<State>((set, get) => ({
   addClip: (clip) => set(state => state.project ? ({
     project: { ...state.project, clips: [...state.project.clips, clip] },
     dirty: true,
+    clipCreatedToken: state.clipCreatedToken + 1,
   }) : state),
   updateClip: (id, patch) => set(state => state.project ? ({
     project: { ...state.project, clips: state.project.clips.map(c => c.id === id ? { ...c, ...patch } : c) },
@@ -167,6 +180,7 @@ export const useProjectStore = create<State>((set, get) => ({
   appendToSequence: (clipId) => set(state => state.project ? ({
     project: { ...state.project, sequence: [...state.project.sequence, { clipId }] },
     dirty: true,
+    sequenceAppendToken: state.sequenceAppendToken + 1,
   }) : state),
   reorderSequence: (from, to) => set(state => {
     if (!state.project) return state;

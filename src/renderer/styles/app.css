@@ -40,6 +40,16 @@ body {
   padding: 6px;
   gap: 6px;
 }
+/* Sequence row collapses on first run when there's nothing to stitch yet.
+   `data-seq="hint"` shows a thin discovery stripe; `none` removes the row
+   entirely. */
+.app[data-seq="hint"] { grid-template-rows: 32px 1fr 28px; }
+.app[data-seq="none"] {
+  grid-template-rows: 32px 1fr;
+  grid-template-areas:
+    "menubar menubar"
+    "main    side";
+}
 
 .menubar {
   grid-area: menubar;
@@ -71,6 +81,37 @@ body {
   border: 1px solid var(--accent-glow);
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
+}
+/* Two-pulse green halo on the right panel when a clip has just been added.
+   Inner box-shadow because the panel has overflow:hidden, so an outer glow
+   would be clipped. Border colour brightens in sync to reinforce the cue. */
+@keyframes side-flash {
+  0%   { border-color: var(--accent-glow); box-shadow: inset 0 0 0 0 transparent; }
+  20%  { border-color: var(--accent);      box-shadow: inset 0 0 32px 2px var(--accent-strong); }
+  45%  { border-color: var(--accent-glow); box-shadow: inset 0 0 8px 0 transparent; }
+  65%  { border-color: var(--accent);      box-shadow: inset 0 0 24px 2px var(--accent-strong); }
+  100% { border-color: var(--accent-glow); box-shadow: inset 0 0 0 0 transparent; }
+}
+.side.flash { animation: side-flash 1.4s ease-out; }
+/* Same animation used to flash the sequence bar when a clip is appended via
+   the "+ Add to sequence" button on the clip detail panel. */
+.seq.flash { animation: side-flash 1.4s ease-out; }
+
+/* Halo pulse for the freshly-relevant action button — usually "Export clip…"
+   right after a new clip lands in the detail view. Two iterations of an
+   expanding ring; the button picks up primary styling in tandem so it reads
+   as the next step. */
+@keyframes btn-halo-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-strong); }
+  50%      { box-shadow: 0 0 0 5px var(--accent-strong); }
+}
+.btn-pulse {
+  animation: btn-halo-pulse 1.4s ease-in-out 2;
+  background: var(--accent-2) !important;
+  border-color: var(--accent) !important;
+  color: #d8f9b3 !important;
+  font-weight: 600;
 }
 .side > * { min-height: 0; }
 .seq {
@@ -83,6 +124,21 @@ body {
   padding: 8px 12px;
   gap: 8px;
   overflow-x: auto;
+}
+/* Discovery stripe shown when the user has 1 clip — flags that the sequence
+   feature exists without the full 96px commitment. */
+.seq-stripe {
+  grid-area: seq;
+  background: var(--panel-2);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.01em;
 }
 
 button {
@@ -144,6 +200,300 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
 }
 
 .dim { color: var(--muted); }
+
+/* First-run empty state: full-screen hero with one big CTA. Shown whenever no
+   project is loaded so the user is never confronted with the editor chrome
+   before they've picked a video. */
+.empty-state {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.empty-state-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 480px;
+  gap: 14px;
+}
+.empty-state-logo {
+  height: 72px;
+  width: auto;
+  display: block;
+}
+.empty-state-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.empty-state-tagline {
+  margin: 0 0 12px 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.empty-state-cta {
+  font-size: 16px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  min-width: 220px;
+}
+.empty-state-secondary {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  padding: 6px 10px;
+}
+.empty-state-secondary:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+  border-color: transparent;
+}
+
+/* Custom video transport bar — replaces the native <video controls> so the
+   picture isn't covered by chrome the user has to peer past. Fades into the
+   video so it doesn't sit there as a hard rectangle. */
+.transport-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: linear-gradient(180deg, rgba(20,22,26,0) 0%, rgba(20,22,26,0.85) 60%);
+  z-index: 10;
+  user-select: none;
+}
+.transport-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.transport-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.12);
+  border-color: transparent;
+}
+.transport-btn.play-btn {
+  font-size: 15px;
+  min-width: 32px;
+  text-align: center;
+}
+.scrub-wrap {
+  flex: 1;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0 6px;
+}
+.scrub-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.22);
+  border-radius: 2px;
+  position: relative;
+  transition: height 120ms ease;
+}
+.scrub-wrap:hover .scrub-track { height: 6px; }
+.scrub-progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.scrub-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.4);
+}
+.transport-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  padding: 0 4px;
+  letter-spacing: 0.01em;
+}
+/* Click-anywhere-on-the-picture-to-toggle-play. Kept under the transport bar
+   and corner button via z-index so those handle their own clicks. */
+.play-overlay {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  background: transparent;
+  z-index: 1;
+}
+/* Reel framing toggle, top-right corner of the preview. */
+.preview-corner-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 4px;
+  padding: 4px 10px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  z-index: 5;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.preview-corner-btn:hover { background: rgba(0,0,0,0.75); }
+.preview-corner-btn.active {
+  background: var(--accent);
+  color: black;
+  border-color: var(--accent);
+}
+.zoom-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.6);
+  color: var(--text);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  pointer-events: none;
+  z-index: 4;
+  transform: translateY(36px);
+}
+
+/* Clip-detail panel restructured as a 1 → 2 → 3 narrative (Track / Zoom /
+   Speed). Each section gets a number-prefixed heading; sub-steps marked
+   "(optional)" so first-timers know they can stop at step 1 and still
+   export. */
+.clip-steps { display: flex; flex-direction: column; gap: 14px; }
+.clip-steps .step {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.clip-steps .step-title {
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.clip-steps .step-optional {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.clip-steps .step-hint {
+  margin: 0 0 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Speed preset chips — landmarks on the slider so a parent doesn't need to
+   guess what 0.5× looks like. The slider stays for in-between values. */
+.speed-presets { display: flex; gap: 4px; flex-wrap: wrap; }
+.speed-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+.speed-chip.active {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #d8f9b3;
+  font-weight: 600;
+}
+
+/* Clip name — the panel-title and the user's anchor for "which clip am I
+   working on?". Auto-grows to multiple lines for long names. Visible faint
+   border + pencil icon by default so the rename affordance is obvious;
+   tightens up when actually focused. */
+.clip-name-wrap {
+  position: relative;
+  margin: 0 0 12px 0;
+}
+.clip-name-wrap::after {
+  content: '✎';
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  pointer-events: none;
+  color: var(--muted);
+  font-size: 14px;
+  opacity: 0.7;
+  transition: opacity 120ms ease;
+}
+.clip-name-wrap:focus-within::after { opacity: 0; }
+.clip-name-input {
+  display: block;
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 30px 6px 10px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  border-radius: 5px;
+  font-family: inherit;
+  resize: none;
+  overflow: hidden;
+  cursor: text;
+}
+.clip-name-input:hover { border-color: var(--accent-strong); }
+.clip-name-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(109, 209, 13, 0.2); }
+/* When the name is still the default "Untitled clip N", style it like
+   placeholder text — italic and dimmed — so the user reads it as a prompt
+   to rename rather than a finalized title. Becomes solid the moment they
+   replace it. */
+.clip-name-wrap.untitled .clip-name-input {
+  font-style: italic;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Timeline primary action row: Start clip / End clip are the headline verbs.
+   The "End clip" button only lights up once a clip is being marked. */
+.timeline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.timeline-actions .marking-status {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
