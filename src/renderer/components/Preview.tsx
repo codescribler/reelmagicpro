@@ -5,8 +5,8 @@ import { previewClock } from '../state/previewClock';
 import { markerCentreAt } from '../state/markerPosition';
 import { clampPlayhead, frameStepSeconds, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
-import { FocusPlaceOverlay } from './FocusPlaceOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
+import { InstagramCropOverlay } from './InstagramCropOverlay';
 
 export function Preview() {
   const project = useProjectStore(s => s.project);
@@ -21,6 +21,7 @@ export function Preview() {
   // their in/out times. Held in state so the JSX re-runs the visibility
   // filter every tick.
   const [tickTime, setTickTime] = useState(0);
+  const [showReelFrame, setShowReelFrame] = useState(false);
 
   const seqIndex = previewMode.kind === 'sequence' ? previewMode.index : -1;
 
@@ -28,7 +29,6 @@ export function Preview() {
     if (!project) return null;
     if (previewMode.kind === 'clip'
       || previewMode.kind === 'set-zoom'
-      || previewMode.kind === 'place-focus'
       || previewMode.kind === 'track-marker') {
       return project.clips.find(c => c.id === previewMode.clipId) ?? null;
     }
@@ -192,11 +192,10 @@ export function Preview() {
   const dh = sh * fit;
 
   const isSetZoom = previewMode.kind === 'set-zoom';
-  const isPlaceFocus = previewMode.kind === 'place-focus';
   const isTrackMarker = previewMode.kind === 'track-marker';
   // While placing or tracking a focus marker we temporarily disable the zoom
   // transform so the user can interact with the full source frame.
-  const suspendZoom = isSetZoom || isPlaceFocus || isTrackMarker;
+  const suspendZoom = isSetZoom || isTrackMarker;
 
   let zoomTransform = '';
   let zoomFactor = 1;
@@ -269,17 +268,27 @@ export function Preview() {
               const top = (cy - m.height / 2) * fit;
               const w = m.width * fit;
               const h = m.height * fit;
+              const isOval = m.shape === 'oval';
+              const outlineStyle: React.CSSProperties = isOval
+                ? {
+                  position: 'absolute',
+                  left, top, width: w, height: h,
+                  border: `3px solid ${m.color}`,
+                  borderRadius: '50%',
+                  boxSizing: 'border-box',
+                }
+                : {
+                  position: 'absolute',
+                  left, top, width: w, height: h,
+                  borderTop: `1px solid ${m.color}`,
+                  borderLeft: `1px solid ${m.color}`,
+                  borderRight: `1px solid ${m.color}`,
+                  borderBottom: `4px solid ${m.color}`,
+                  boxSizing: 'border-box',
+                };
               return (
                 <React.Fragment key={m.id}>
-                  <div style={{
-                    position: 'absolute',
-                    left, top, width: w, height: h,
-                    borderTop: `1px solid ${m.color}`,
-                    borderLeft: `1px solid ${m.color}`,
-                    borderRight: `1px solid ${m.color}`,
-                    borderBottom: `4px solid ${m.color}`,
-                    boxSizing: 'border-box',
-                  }} />
+                  <div style={outlineStyle} />
                   {m.label && (
                     <div style={{
                       position: 'absolute',
@@ -362,21 +371,28 @@ export function Preview() {
               title={`Skip forward ${skipSeconds} seconds (→ arrow)`}>
               + {skipSeconds}s
             </button>
+            <button
+              onClick={e => { e.stopPropagation(); setShowReelFrame(v => !v); }}
+              title="Show / hide the 9:16 Instagram crop framing"
+              style={showReelFrame ? { background: 'var(--accent)', color: 'black' } : undefined}>
+              {showReelFrame ? '◻ Reel' : '▭ Reel'}
+            </button>
+          </div>
+        )}
+        {showReelFrame && activeClip && !suspendZoom && (
+          <div style={{
+            position: 'absolute', top: 0, left: 0,
+            width: dw, height: dh,
+            transformOrigin: '0 0',
+            transform: zoomTransform,
+            pointerEvents: 'none',
+          }}>
+            <InstagramCropOverlay clip={activeClip} source={project.sourceVideo} fit={fit} />
           </div>
         )}
         {isSetZoom && previewMode.kind === 'set-zoom' && (
           <ZoomRegionOverlay
             clipId={previewMode.clipId}
-            sourceWidth={sw}
-            sourceHeight={sh}
-            displayWidth={dw}
-            displayHeight={dh}
-          />
-        )}
-        {isPlaceFocus && previewMode.kind === 'place-focus' && (
-          <FocusPlaceOverlay
-            clipId={previewMode.clipId}
-            markerId={previewMode.markerId}
             sourceWidth={sw}
             sourceHeight={sh}
             displayWidth={dw}

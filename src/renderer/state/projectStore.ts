@@ -1,12 +1,13 @@
 import { create } from 'zustand';
-import type { Project, Clip, SourceMeta, SequenceEntry, ZoomRect, ExportProgress } from '../../shared/types';
+import type { Project, Clip, SourceMeta, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress } from '../../shared/types';
 
 export type PreviewMode =
   | { kind: 'idle' }
   | { kind: 'source' }
   | { kind: 'clip'; clipId: string }
   | { kind: 'sequence'; index: number }
-  | { kind: 'set-zoom'; clipId: string };
+  | { kind: 'set-zoom'; clipId: string }
+  | { kind: 'track-marker'; clipId: string; markerId: string };
 
 interface State {
   project: Project | null;
@@ -25,10 +26,39 @@ interface State {
   deleteClip: (id: string) => void;
   duplicateClip: (id: string) => string | null;
   selectClip: (id: string | null) => void;
+  viewSource: () => void;
   setPreviewMode: (m: PreviewMode) => void;
+  replayToken: number;
+  replayClip: () => void;
   appendToSequence: (clipId: string) => void;
   reorderSequence: (from: number, to: number) => void;
   removeFromSequence: (index: number) => void;
+  clearSequence: () => void;
+
+  addFocusMarker: (clipId: string, marker: FocusMarker) => void;
+  updateFocusMarker: (clipId: string, markerId: string, patch: Partial<FocusMarker>) => void;
+  deleteFocusMarker: (clipId: string, markerId: string) => void;
+  togglePrimaryMarker: (clipId: string, markerId: string) => void;
+
+  addBookmark: (time: number) => void;
+  updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
+  deleteBookmark: (id: string) => void;
+
+  // Token-based seek request: incrementing the token tells Preview to jump
+  // the video element to `time`. Bookmark click and skip-to-bookmark go
+  // through here so we can also force the preview into source mode.
+  seekRequest: { time: number; token: number } | null;
+  requestSeek: (time: number) => void;
+
+  // Token-based relative skip. Lets the clip editor and the preview overlay
+  // share one mechanism for ±5s nudges without each owning its own video ref.
+  skipRequest: { delta: number; token: number } | null;
+  requestSkip: (delta: number) => void;
+
+  // Token-based pause. Used by the timeline's "Set out (from preview)" button
+  // so the user doesn't blow past the moment they just marked.
+  pauseRequest: { token: number } | null;
+  requestPause: () => void;
 
   activeRun: { runId: string; phase: ExportProgress['phase']; percent: number; currentItem: number; totalItems: number } | null;
   exportResult: { ok: boolean; outputPath?: string; error?: string } | null;
@@ -42,6 +72,14 @@ function newId(): string {
   return 'clip_' + Math.random().toString(36).slice(2, 10);
 }
 
+function newMarkerId(): string {
+  return 'fm_' + Math.random().toString(36).slice(2, 10);
+}
+
+function newBookmarkId(): string {
+  return 'bm_' + Math.random().toString(36).slice(2, 10);
+}
+
 export const useProjectStore = create<State>((set, get) => ({
   project: null,
   projectPath: null,
@@ -51,7 +89,11 @@ export const useProjectStore = create<State>((set, get) => ({
   invalidClipIds: new Set(),
 
   setProject: (p, path) => set({
-    project: p, projectPath: path ?? null, dirty: false,
+    // Normalize on entry so older project files (or a stale main bundle
+    // that hasn't picked up the bookmarks schema default yet) can't crash
+    // the renderer with `project.bookmarks` being undefined.
+    project: p ? { ...p, bookmarks: p.bookmarks ?? [] } : null,
+    projectPath: path ?? null, dirty: false,
     selectedClipId: null, previewMode: p ? { kind: 'source' } : { kind: 'idle' },
   }),
   setProjectPath: (path) => set({ projectPath: path }),
@@ -59,7 +101,7 @@ export const useProjectStore = create<State>((set, get) => ({
   setSource: (s) => set(state => ({
     project: state.project
       ? { ...state.project, sourceVideo: s }
-      : { version: 1, sourceVideo: s, clips: [], sequence: [] },
+      : { version: 1, sourceVideo: s, clips: [], sequence: [], bookmarks: [] },
     dirty: true,
     previewMode: { kind: 'source' },
   })),
@@ -82,7 +124,9 @@ export const useProjectStore = create<State>((set, get) => ({
 
     let nextPreviewMode = state.previewMode;
     if (
-      (state.previewMode.kind === 'clip' || state.previewMode.kind === 'set-zoom')
+      (state.previewMode.kind === 'clip'
+        || state.previewMode.kind === 'set-zoom'
+        || state.previewMode.kind === 'track-marker')
       && state.previewMode.clipId === id
     ) {
       nextPreviewMode = { kind: 'source' };
@@ -102,7 +146,13 @@ export const useProjectStore = create<State>((set, get) => ({
     if (!proj) return null;
     const orig = proj.clips.find(c => c.id === id);
     if (!orig) return null;
-    const copy: Clip = { ...orig, id: newId(), name: `${orig.name} (copy)`, zoom: { ...orig.zoom } };
+    const copy: Clip = {
+      ...orig,
+      id: newId(),
+      name: `${orig.name} (copy)`,
+      zoom: { ...orig.zoom },
+      focusMarkers: orig.focusMarkers.map(m => ({ ...m, id: newMarkerId() })),
+    };
     set({
       project: { ...proj, clips: [...proj.clips, copy] },
       dirty: true,
@@ -110,7 +160,10 @@ export const useProjectStore = create<State>((set, get) => ({
     return copy.id;
   },
   selectClip: (id) => set({ selectedClipId: id, previewMode: id ? { kind: 'clip', clipId: id } : { kind: 'source' } }),
+  viewSource: () => set({ selectedClipId: null, previewMode: { kind: 'source' } }),
   setPreviewMode: (m) => set({ previewMode: m }),
+  replayToken: 0,
+  replayClip: () => set(state => ({ replayToken: state.replayToken + 1 })),
   appendToSequence: (clipId) => set(state => state.project ? ({
     project: { ...state.project, sequence: [...state.project.sequence, { clipId }] },
     dirty: true,
@@ -127,6 +180,118 @@ export const useProjectStore = create<State>((set, get) => ({
     const seq = state.project.sequence.filter((_, i) => i !== index);
     return { project: { ...state.project, sequence: seq }, dirty: true };
   }),
+  clearSequence: () => set(state => {
+    if (!state.project) return state;
+    if (state.project.sequence.length === 0) return state;
+    // If the preview is currently playing this sequence, drop back to source
+    // so we don't keep a now-invalid index in previewMode.
+    const nextPreviewMode = state.previewMode.kind === 'sequence'
+      ? { kind: 'source' as const }
+      : state.previewMode;
+    return {
+      project: { ...state.project, sequence: [] },
+      previewMode: nextPreviewMode,
+      dirty: true,
+    };
+  }),
+
+  addFocusMarker: (clipId, marker) => set(state => state.project ? ({
+    project: {
+      ...state.project,
+      clips: state.project.clips.map(c =>
+        c.id === clipId ? { ...c, focusMarkers: [...c.focusMarkers, marker] } : c
+      ),
+    },
+    dirty: true,
+  }) : state),
+  updateFocusMarker: (clipId, markerId, patch) => set(state => state.project ? ({
+    project: {
+      ...state.project,
+      clips: state.project.clips.map(c =>
+        c.id === clipId
+          ? { ...c, focusMarkers: c.focusMarkers.map(m => m.id === markerId ? { ...m, ...patch } : m) }
+          : c
+      ),
+    },
+    dirty: true,
+  }) : state),
+  togglePrimaryMarker: (clipId, markerId) => set(state => {
+    if (!state.project) return state;
+    const clips = state.project.clips.map(c => {
+      if (c.id !== clipId) return c;
+      const target = c.focusMarkers.find(m => m.id === markerId);
+      if (!target) return c;
+      const willBePrimary = !target.primary;
+      // Strip primary cleanly rather than writing `primary: false` so the
+      // saved project file stays minimal.
+      const focusMarkers = c.focusMarkers.map(m => {
+        const next: FocusMarker = { ...m };
+        delete next.primary;
+        if (m.id === markerId && willBePrimary) next.primary = true;
+        return next;
+      });
+      return { ...c, focusMarkers };
+    });
+    return { project: { ...state.project, clips }, dirty: true };
+  }),
+  deleteFocusMarker: (clipId, markerId) => set(state => {
+    if (!state.project) return state;
+    let nextMode = state.previewMode;
+    if (state.previewMode.kind === 'track-marker' && state.previewMode.markerId === markerId) {
+      nextMode = { kind: 'clip', clipId };
+    }
+    return {
+      project: {
+        ...state.project,
+        clips: state.project.clips.map(c =>
+          c.id === clipId
+            ? { ...c, focusMarkers: c.focusMarkers.filter(m => m.id !== markerId) }
+            : c
+        ),
+      },
+      previewMode: nextMode,
+      dirty: true,
+    };
+  }),
+
+  addBookmark: (time) => set(state => state.project ? ({
+    project: {
+      ...state.project,
+      bookmarks: [
+        ...state.project.bookmarks,
+        { id: newBookmarkId(), time: Math.max(0, time), createdAt: Date.now() },
+      ],
+    },
+    dirty: true,
+  }) : state),
+  updateBookmark: (id, patch) => set(state => state.project ? ({
+    project: {
+      ...state.project,
+      bookmarks: state.project.bookmarks.map(b => b.id === id ? { ...b, ...patch } : b),
+    },
+    dirty: true,
+  }) : state),
+  deleteBookmark: (id) => set(state => state.project ? ({
+    project: { ...state.project, bookmarks: state.project.bookmarks.filter(b => b.id !== id) },
+    dirty: true,
+  }) : state),
+
+  seekRequest: null,
+  requestSeek: (time) => set(state => ({
+    selectedClipId: null,
+    previewMode: { kind: 'source' },
+    seekRequest: { time: Math.max(0, time), token: (state.seekRequest?.token ?? 0) + 1 },
+  })),
+
+  skipRequest: null,
+  requestSkip: (delta) => set(state => ({
+    skipRequest: { delta, token: (state.skipRequest?.token ?? 0) + 1 },
+  })),
+
+  pauseRequest: null,
+  requestPause: () => set(state => ({
+    pauseRequest: { token: (state.pauseRequest?.token ?? 0) + 1 },
+  })),
 
   activeRun: null,
   exportResult: null,

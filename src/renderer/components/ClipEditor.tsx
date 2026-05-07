@@ -1,10 +1,15 @@
 import React from 'react';
 import { useProjectStore } from '../state/projectStore';
+import { useSettings } from '../state/settings';
+import { ClipFocusMarkers } from './ClipFocusMarkers';
 
 export function ClipEditor({ clipId }: { clipId: string }) {
   const project = useProjectStore(s => s.project);
   const update = useProjectStore(s => s.updateClip);
   const setMode = useProjectStore(s => s.setPreviewMode);
+  const replayClip = useProjectStore(s => s.replayClip);
+  const requestSkip = useProjectStore(s => s.requestSkip);
+  const skipSeconds = useSettings(s => s.skipSeconds);
 
   const clip = project?.clips.find(c => c.id === clipId);
   if (!project || !clip) return null;
@@ -14,7 +19,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
   const isFullFrame = clip.zoom.x === 0 && clip.zoom.y === 0 && clip.zoom.width === sw && clip.zoom.height === sh;
 
   return (
-    <div style={{ marginTop: 12, padding: 8, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4 }}>
+    <div>
       <label style={{ display: 'block', marginBottom: 6 }}>
         <div className="dim" style={{ fontSize: 11 }}>Name</div>
         <input
@@ -31,7 +36,10 @@ export function ClipEditor({ clipId }: { clipId: string }) {
           style={{ width: '100%' }}
         />
       </label>
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button onClick={replayClip} title="Rewind to the clip's in-point and play from the start">Replay</button>
+        <button onClick={() => requestSkip(-skipSeconds)} title={`Move the playhead back ${skipSeconds} seconds (← arrow)`}>− {skipSeconds}s</button>
+        <button onClick={() => requestSkip(+skipSeconds)} title={`Move the playhead forward ${skipSeconds} seconds (→ arrow)`}>+ {skipSeconds}s</button>
         <button onClick={() => setMode({ kind: 'set-zoom', clipId })}>Set zoom region</button>
         <button
           disabled={isFullFrame}
@@ -39,6 +47,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
           Reset zoom
         </button>
       </div>
+      <ClipFocusMarkers clip={clip} />
     </div>
   );
 }

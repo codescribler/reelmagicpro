@@ -1,35 +1,54 @@
-import { buildClipFfmpegArgs } from '../../src/main/ffmpeg/command';
+import { buildClipFfmpegArgs, buildOutroFfmpegArgs } from '../../src/main/ffmpeg/command';
 import type { Clip, SourceMeta } from '../../src/shared/types';
 
 const source: SourceMeta = { path: '/in.mp4', duration: 100, width: 1920, height: 1080, fps: 30 };
 const baseClip: Clip = {
   id: 'c1', name: 'A', in: 10, out: 20, speed: 1,
   zoom: { x: 0, y: 0, width: 1920, height: 1080 },
+  focusMarkers: [],
 };
+
+// Mirrors the watermark string the implementation appends to every clip's
+// filter chain. Platform-aware because the fontfile path differs by OS.
+function expectedWatermark(s: SourceMeta): string {
+  const fontFile = process.platform === 'win32'
+    ? 'C:/Windows/Fonts/arial.ttf'
+    : process.platform === 'darwin'
+      ? '/System/Library/Fonts/Supplemental/Arial.ttf'
+      : '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+  const fontSize = Math.max(14, Math.round(s.height * 0.022));
+  const x = Math.round(s.width * 0.1);
+  const y = Math.max(12, Math.round(s.height * 0.02));
+  return `drawtext=fontfile='${fontFile}':text='Made with reelmagicpro.co.uk'`
+    + `:x=${x}:y=${y}`
+    + `:fontcolor=white:fontsize=${fontSize}`
+    + `:borderw=2:bordercolor=black@0.7`;
+}
 
 test('builds args for full-frame, 1x speed', () => {
   const args = buildClipFfmpegArgs(baseClip, source, '/out.mp4');
   expect(args).toEqual([
     '-y',
     '-ss', '10', '-to', '20', '-i', '/in.mp4',
-    '-filter_complex', '[0:v]crop=1920:1080:0:0,scale=1920:1080,setpts=PTS[v]',
+    '-filter_complex', `[0:v]crop=1920:1080:0:0,scale=1920:1080,${expectedWatermark(source)},setpts=PTS-STARTPTS[v]`,
     '-map', '[v]', '-map', '0:a?',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
-    '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
     '-movflags', '+faststart',
     '-progress', 'pipe:2',
     '/out.mp4',
   ]);
 });
 
-test('uses silent audio and PTS/s when speed != 1', () => {
+test('uses silent audio and (PTS-STARTPTS)/s when speed != 1', () => {
   const clip: Clip = { ...baseClip, speed: 0.5 };
   const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
   expect(args).toContain('-f');
   expect(args).toContain('lavfi');
   expect(args).toContain('anullsrc=cl=stereo:r=48000');
   const fcIndex = args.indexOf('-filter_complex');
-  expect(args[fcIndex + 1]).toBe('[0:v]crop=1920:1080:0:0,scale=1920:1080,setpts=PTS/0.5[v]');
+  expect(args[fcIndex + 1]).toBe(`[0:v]crop=1920:1080:0:0,scale=1920:1080,${expectedWatermark(source)},setpts=(PTS-STARTPTS)/0.5[v]`);
   expect(args).toContain('-shortest');
   expect(args).toContain('1:a');
 });
@@ -38,7 +57,7 @@ test('uses zoom rect in crop and rescales to source size', () => {
   const clip: Clip = { ...baseClip, zoom: { x: 100, y: 50, width: 640, height: 360 } };
   const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
   const fcIndex = args.indexOf('-filter_complex');
-  expect(args[fcIndex + 1]).toBe('[0:v]crop=640:360:100:50,scale=1920:1080,setpts=PTS[v]');
+  expect(args[fcIndex + 1]).toBe(`[0:v]crop=640:360:100:50,scale=1920:1080,${expectedWatermark(source)},setpts=PTS-STARTPTS[v]`);
 });
 
 test('formats fractional seconds without exponent', () => {
@@ -48,4 +67,330 @@ test('formats fractional seconds without exponent', () => {
   expect(args[ssIdx + 1]).toBe('12.4');
   const toIdx = args.indexOf('-to');
   expect(args[toIdx + 1]).toBe('18.75');
+});
+
+test('emits drawbox filter for each focus marker (full-frame zoom)', () => {
+  const clip: Clip = {
+    ...baseClip,
+    focusMarkers: [
+      { id: 'm1', x: 100, y: 200, width: 80, height: 80, in: 12, out: 18, color: 'yellow' },
+    ],
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIndex = args.indexOf('-filter_complex');
+  // marker times are clip-relative: in=12 -> relIn=2, out=18 -> relOut=8
+  // outline (t=1) + filled 4px bottom bar at y = 200 + 80 - 4 = 276
+  expect(args[fcIndex + 1]).toBe(
+    "[0:v]crop=1920:1080:0:0,scale=1920:1080,"
+    + "drawbox=x=100:y=200:w=80:h=80:color=yellow:t=1:enable='between(t\\,2\\,8)',"
+    + "drawbox=x=100:y=276:w=80:h=4:color=yellow:t=fill:enable='between(t\\,2\\,8)',"
+    + `${expectedWatermark(source)},`
+    + "setpts=PTS-STARTPTS[v]"
+  );
+});
+
+test('emits per-segment drawboxes for a path-based marker', () => {
+  // drawbox can't follow an expression of t (it evaluates x/y once at filter
+  // init), so a tracked path is rendered as one drawbox per path segment with
+  // a constant position and a time-windowed enable. 3 path points → 3 segments.
+  const clip: Clip = {
+    ...baseClip,
+    focusMarkers: [
+      {
+        id: 'm1', x: 100, y: 100, width: 80, height: 80,
+        in: 10, out: 14, color: 'yellow',
+        path: [
+          { t: 0, cx: 100, cy: 200 },   // top-left = (60, 160)
+          { t: 1, cx: 200, cy: 200 },   // top-left = (160, 160)
+          { t: 2, cx: 200, cy: 400 },   // top-left = (160, 360)
+        ],
+      },
+    ],
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIndex = args.indexOf('-filter_complex');
+  const filter = args[fcIndex + 1]!;
+  // relIn = 0, relOut = 4. Last segment extends from t=2 to relOut=4.
+  // Each segment emits an outline (t=1) + bottom bar (t=fill, h=4).
+  // Bottom bar y = top-left y + 80 - 4 = top-left y + 76.
+  expect(filter).toContain("drawbox=x=60:y=160:w=80:h=80:color=yellow:t=1:enable='between(t\\,0\\,1)'");
+  expect(filter).toContain("drawbox=x=60:y=236:w=80:h=4:color=yellow:t=fill:enable='between(t\\,0\\,1)'");
+  expect(filter).toContain("drawbox=x=160:y=160:w=80:h=80:color=yellow:t=1:enable='between(t\\,1\\,2)'");
+  expect(filter).toContain("drawbox=x=160:y=236:w=80:h=4:color=yellow:t=fill:enable='between(t\\,1\\,2)'");
+  expect(filter).toContain("drawbox=x=160:y=360:w=80:h=80:color=yellow:t=1:enable='between(t\\,2\\,4)'");
+  expect(filter).toContain("drawbox=x=160:y=436:w=80:h=4:color=yellow:t=fill:enable='between(t\\,2\\,4)'");
+  // No eval= options on drawbox — it doesn't support them, and we don't need them.
+  expect(filter).not.toContain(':eval=');
+});
+
+test('uses piecewise-expr drawtext for a path-based marker label', () => {
+  // drawtext does re-evaluate x/y per frame, so the label still uses the
+  // piecewise expression to follow the marker smoothly.
+  const clip: Clip = {
+    ...baseClip,
+    focusMarkers: [
+      {
+        id: 'm1', x: 100, y: 100, width: 80, height: 80,
+        in: 10, out: 14, color: 'yellow', label: 'Striker',
+        path: [
+          { t: 0, cx: 100, cy: 200 },
+          { t: 1, cx: 200, cy: 200 },
+        ],
+      },
+    ],
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIndex = args.indexOf('-filter_complex');
+  const filter = args[fcIndex + 1]!;
+  expect(filter).toContain('drawtext=');
+  expect(filter).toContain("text='Striker'");
+  // x/y are wrapped in single quotes and reference the if(lt(t,...)) form.
+  expect(filter).toContain("x='(if(lt(t\\,1)");
+  expect(filter).toContain("y='(if(lt(t\\,1)");
+});
+
+test('emits geq-based oval filter wrapped in format=rgba/yuv420p', () => {
+  // Oval markers can't be drawn with drawbox, so the export pipeline switches
+  // into rgba, runs a geq filter that paints pixels falling on the ellipse
+  // outline ring, and converts back to yuv420p. The format conversion only
+  // happens when at least one oval marker exists on the clip.
+  const clip: Clip = {
+    ...baseClip,
+    focusMarkers: [
+      { id: 'm1', x: 100, y: 200, width: 80, height: 80, in: 12, out: 18, color: 'red', shape: 'oval' },
+    ],
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIndex = args.indexOf('-filter_complex');
+  const filter = args[fcIndex + 1]!;
+  expect(filter).toContain(',format=rgba,');
+  expect(filter).toContain(',format=yuv420p,');
+  expect(filter).toContain('geq=');
+  // Red is mapped to (255, 0, 0) — geq takes RGB triplets, not colour names.
+  expect(filter).toContain('255');
+  // Marker is centred at (140, 240) with rx=ry=40; outline thickness 4px.
+  expect(filter).toContain('(X-140)');
+  expect(filter).toContain('(Y-240)');
+  // Time-window enable still kicks in just like the rect path.
+  expect(filter).toContain("enable='between(t\\,2\\,8)'");
+  expect(filter).not.toContain('drawbox=');
+});
+
+test('emits per-segment geq filters for a path-based oval marker', () => {
+  // A path-based oval can't inline the piecewise cx/cy expression into geq —
+  // the expression gets referenced six times across r/g/b channels and
+  // inner/outer ellipse tests, blowing past ffmpeg's expression parser limit
+  // on real-world tracks. Instead we stamp one geq per path segment, each
+  // with constant cx/cy and a time-windowed enable (mirroring rect drawbox).
+  const clip: Clip = {
+    ...baseClip,
+    focusMarkers: [
+      {
+        id: 'm1', x: 100, y: 100, width: 80, height: 80,
+        in: 10, out: 14, color: 'cyan', shape: 'oval',
+        path: [
+          { t: 0, cx: 100, cy: 200 },
+          { t: 1, cx: 200, cy: 200 },
+          { t: 2, cx: 200, cy: 400 },
+        ],
+      },
+    ],
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIndex = args.indexOf('-filter_complex');
+  const filter = args[fcIndex + 1]!;
+  // Each segment is a fresh geq with constant centre and its own enable
+  // window. No piecewise t-expression should appear inside the geq args.
+  expect(filter.match(/geq=/g)?.length).toBe(3);
+  expect(filter).toContain('(X-100)');
+  expect(filter).toContain('(X-200)');
+  expect(filter).toContain("enable='between(t\\,0\\,1)'");
+  expect(filter).toContain("enable='between(t\\,1\\,2)'");
+  expect(filter).toContain("enable='between(t\\,2\\,4)'");
+  // The geq expressions must not contain `if(lt(t,...)` — that would mean
+  // we still embedded the piecewise t-expression that broke the parser.
+  expect(filter).not.toMatch(/geq=[^,]*if\(lt\(t/);
+});
+
+test('burns the reelmagicpro.co.uk watermark into every clip export', () => {
+  // Branding sits in the top-left safe-area of every export, indented ~10%
+  // of source width so it clears the left-edge cropping that some players
+  // and social uploads apply. It goes after the marker filters so a focus
+  // marker that overlaps the corner can't hide it.
+  const args = buildClipFfmpegArgs(baseClip, source, '/out.mp4');
+  const fcIndex = args.indexOf('-filter_complex');
+  const filter = args[fcIndex + 1]!;
+  expect(filter).toContain("text='Made with reelmagicpro.co.uk'");
+  expect(filter).toContain('fontcolor=white');
+  expect(filter).toContain('fontsize=24');
+  // 10% of 1920 = 192; y stays a thin top margin (~22 at 1080p).
+  expect(filter).toContain('x=192:y=22');
+  expect(filter).toContain('borderw=2');
+  // The watermark is the last thing rendered before setpts (anything after
+  // setpts wouldn't get burned in correctly).
+  expect(filter).toMatch(/drawtext=[^,]+,setpts=/);
+});
+
+test('rect-only clips do not pay the format=rgba conversion cost', () => {
+  // Sanity check: when there are no ovals we keep the YUV-native pipeline so
+  // exports of legacy projects don't regress on speed.
+  const clip: Clip = {
+    ...baseClip,
+    focusMarkers: [
+      { id: 'm1', x: 100, y: 200, width: 80, height: 80, in: 12, out: 18, color: 'yellow' },
+    ],
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIndex = args.indexOf('-filter_complex');
+  const filter = args[fcIndex + 1]!;
+  expect(filter).not.toContain('format=rgba');
+  expect(filter).not.toContain('format=yuv420p,');
+  expect(filter).toContain('drawbox=');
+});
+
+test('outro args: scale-fit + black pad to source canvas, outro audio when present', () => {
+  const args = buildOutroFfmpegArgs('/outro.mp4', source, '/part-outro.mp4', true);
+  const fcIndex = args.indexOf('-filter_complex');
+  // fps + setsar in the filter, plus -r and -vsync cfr in the encoder, are
+  // what stop the concat from desyncing into a frozen-frame outro.
+  expect(args[fcIndex + 1]).toBe(
+    '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease'
+    + ',pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black'
+    + ',fps=30,setsar=1'
+    + ',setpts=PTS-STARTPTS[v]'
+  );
+  // Outro has audio: only one input, map [v] + 0:a, no -shortest.
+  expect(args.filter(a => a === '-i')).toHaveLength(1);
+  expect(args).toContain('0:a');
+  expect(args).not.toContain('-shortest');
+  // Encoder settings match clip parts so the concat demuxer can re-mux them.
+  expect(args).toContain('libx264');
+  expect(args).toContain('yuv420p');
+  expect(args).toContain('aac');
+  // Force constant framerate at the configured fps.
+  const rIdx = args.indexOf('-r');
+  expect(rIdx).toBeGreaterThanOrEqual(0);
+  expect(args[rIdx + 1]).toBe('30');
+  expect(args).toContain('-vsync');
+  expect(args).toContain('cfr');
+  // Force DAR matching source so libx264 encodes SAR=1 into the SPS
+  // instead of choosing weird ratios (e.g. 2025:2024) that mismatch the
+  // clip parts and crash the concat filter.
+  const aspIdx = args.indexOf('-aspect');
+  expect(aspIdx).toBeGreaterThanOrEqual(0);
+  expect(args[aspIdx + 1]).toBe('1920:1080');
+});
+
+test('outro args: silent track when source has no audio', () => {
+  const args = buildOutroFfmpegArgs('/outro.mp4', source, '/part-outro.mp4', false);
+  // Two inputs: outro + anullsrc.
+  const inputs = args.reduce((n, a) => n + (a === '-i' ? 1 : 0), 0);
+  expect(inputs).toBe(2);
+  expect(args).toContain('anullsrc=cl=stereo:r=48000');
+  expect(args).toContain('1:a');
+  expect(args).toContain('-shortest');
+});
+
+test('marker coords are mapped through the zoom rect', () => {
+  // zoom rect is half the source: a marker at source (1000, 500) with size 80x80
+  // sits inside the right half of the source, but in the cropped+scaled output
+  // it should map to ((1000-960)*2, (500-0)*2) = (80, 1000) with size 160x160.
+  const clip: Clip = {
+    ...baseClip,
+    zoom: { x: 960, y: 0, width: 960, height: 1080 },
+    focusMarkers: [
+      { id: 'm1', x: 1000, y: 500, width: 80, height: 80, in: 10, out: 20, color: 'red' },
+    ],
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIndex = args.indexOf('-filter_complex');
+  // crop=960:1080:960:0 then scale=1920:1080 (so width scale = 2, height scale = 1)
+  // outline (t=1) + filled 4px bottom bar at y = 500 + 80 - 4 = 576
+  expect(args[fcIndex + 1]).toBe(
+    "[0:v]crop=960:1080:960:0,scale=1920:1080,"
+    + "drawbox=x=80:y=500:w=160:h=80:color=red:t=1:enable='between(t\\,0\\,10)',"
+    + "drawbox=x=80:y=576:w=160:h=4:color=red:t=fill:enable='between(t\\,0\\,10)',"
+    + `${expectedWatermark(source)},`
+    + "setpts=PTS-STARTPTS[v]"
+  );
+});
+
+import { instagramWatermarkFilter } from '../../src/main/ffmpeg/command';
+
+test('instagramWatermarkFilter scales font size against the shorter dimension', () => {
+  const filter = instagramWatermarkFilter(1080, 1920);
+  expect(filter).toMatch(/fontsize=24/);
+  expect(filter).toMatch(/:x=108:/);
+  expect(filter).toMatch(/:y=22:/);
+  expect(filter).toContain("text='Made with reelmagicpro.co.uk'");
+  expect(filter).toContain('fontcolor=white');
+  expect(filter).toContain('borderw=2:bordercolor=black@0.7');
+});
+
+import { buildInstagramOutroFfmpegArgs } from '../../src/main/ffmpeg/command';
+
+test('buildInstagramOutroFfmpegArgs scales/pads to 1080x1920 with audio passthrough', () => {
+  const src: SourceMeta = { path: '/in.mp4', duration: 100, width: 1920, height: 1080, fps: 30 };
+  const args = buildInstagramOutroFfmpegArgs('/outro.mp4', src, '/out.mp4', true);
+  const fcIdx = args.indexOf('-filter_complex');
+  expect(args[fcIdx + 1]).toContain('scale=1080:1920:force_original_aspect_ratio=decrease');
+  expect(args[fcIdx + 1]).toContain('pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black');
+  expect(args[fcIdx + 1]).toContain('fps=30');
+  expect(args[fcIdx + 1]).toContain('setsar=1');
+  const aspectIdx = args.indexOf('-aspect');
+  expect(args[aspectIdx + 1]).toBe('1080:1920');
+  expect(args).not.toContain('anullsrc=cl=stereo:r=48000');
+});
+
+test('buildInstagramOutroFfmpegArgs synthesises silent audio when source has none', () => {
+  const src: SourceMeta = { path: '/in.mp4', duration: 100, width: 1920, height: 1080, fps: 30 };
+  const args = buildInstagramOutroFfmpegArgs('/outro.mp4', src, '/out.mp4', false);
+  expect(args).toContain('anullsrc=cl=stereo:r=48000');
+  expect(args).toContain('-shortest');
+});
+
+import { buildInstagramClipFfmpegArgs } from '../../src/main/ffmpeg/command';
+import { computeInstagramFraming } from '../../src/shared/instagramFraming';
+
+test('buildInstagramClipFfmpegArgs adds an IG crop+scale stage and IG watermark', () => {
+  const clip: Clip = { ...baseClip };
+  const framing = computeInstagramFraming(clip, source);
+  const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
+  const fcIdx = args.indexOf('-filter_complex');
+  const fc = args[fcIdx + 1]!;
+  expect(fc).toContain('crop=1920:1080:0:0,scale=1920:1080');
+  expect(fc.match(/crop=/g)?.length).toBe(2);
+  expect(fc).toContain('scale=1080:1920');
+  expect(fc).toMatch(/fontsize=24/);
+  const aspectIdx = args.indexOf('-aspect');
+  expect(args[aspectIdx + 1]).toBe('1080:1920');
+});
+
+test('buildInstagramClipFfmpegArgs preserves marker filters in the chain', () => {
+  const clip: Clip = {
+    ...baseClip,
+    focusMarkers: [
+      { id: 'm1', x: 100, y: 200, width: 80, height: 80, in: 12, out: 18, color: 'yellow' },
+    ],
+  };
+  const framing = computeInstagramFraming(clip, source);
+  const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
+  const fcIdx = args.indexOf('-filter_complex');
+  expect(args[fcIdx + 1]).toContain('drawbox=');
+});
+
+test('standard buildClipFfmpegArgs is byte-identical for a fixture clip (regression guard)', () => {
+  const args = buildClipFfmpegArgs(baseClip, source, '/out.mp4');
+  expect(args).toEqual([
+    '-y',
+    '-ss', '10', '-to', '20', '-i', '/in.mp4',
+    '-filter_complex', `[0:v]crop=1920:1080:0:0,scale=1920:1080,${expectedWatermark(source)},setpts=PTS-STARTPTS[v]`,
+    '-map', '[v]', '-map', '0:a?',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
+    '-movflags', '+faststart',
+    '-progress', 'pipe:2',
+    '/out.mp4',
+  ]);
 });

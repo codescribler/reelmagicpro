@@ -15,8 +15,20 @@ export function ExportProgressModal() {
   const isCancelled = result?.ok === false && result.error === 'Cancelled';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: 'var(--panel)', padding: 24, borderRadius: 8, minWidth: 360, border: '1px solid var(--border)' }}>
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.55)',
+      backdropFilter: 'blur(4px)',
+      WebkitBackdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000,
+    }}>
+      <div style={{
+        background: 'var(--panel)',
+        padding: 24, borderRadius: 10, minWidth: 360,
+        border: '1px solid var(--accent-glow)',
+        boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+      }}>
         <div style={{ fontSize: 16, marginBottom: 8 }}>
           {result?.ok ? 'Export complete' : isCancelled ? 'Export cancelled' : result?.ok === false ? 'Export failed' : 'Exporting…'}
         </div>
@@ -29,7 +41,13 @@ export function ExportProgressModal() {
         {result?.ok && <div className="dim" style={{ marginBottom: 8 }}>{result.outputPath}</div>}
         {result?.ok === false && <div className="dim" style={{ marginBottom: 8, color: isCancelled ? 'var(--muted)' : 'var(--danger)' }}>{result.error}</div>}
         <div style={{ height: 6, background: 'var(--panel-2)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
-          <div style={{ width: `${run?.percent ?? (result?.ok ? 100 : 0)}%`, height: '100%', background: 'var(--accent)' }} />
+          <div style={{
+            width: `${run?.percent ?? (result?.ok ? 100 : 0)}%`,
+            height: '100%',
+            background: 'var(--accent)',
+            boxShadow: '0 0 10px rgba(109, 209, 13, 0.45)',
+            transition: 'width 200ms ease-out',
+          }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
           {!result && <button onClick={cancel}>Cancel</button>}

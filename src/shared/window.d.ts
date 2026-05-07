@@ -20,6 +20,7 @@ declare global {
       cancelExport: (runId: string) => Promise<{ ok: boolean }>;
       checkPath: (p: string) => Promise<{ exists: boolean }>;
       chooseExportPath: (suggestedName: string) => Promise<{ ok: boolean; path?: string }>;
+      chooseOutroFile: () => Promise<{ ok: boolean; path?: string }>;
       onExportProgress: (cb: (p: ExportProgress) => void) => () => void;
     };
   }

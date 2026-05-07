@@ -1,13 +1,25 @@
 import React from 'react';
 import { useProjectStore } from '../state/projectStore';
 
-export function Sequence({ onExportSequence }: { onExportSequence: () => void }) {
+export function Sequence({ onExportSequence, onExportSequenceInstagram }: {
+  onExportSequence: () => void;
+  onExportSequenceInstagram: () => void;
+}) {
   const project = useProjectStore(s => s.project);
   const append = useProjectStore(s => s.appendToSequence);
   const reorder = useProjectStore(s => s.reorderSequence);
   const remove = useProjectStore(s => s.removeFromSequence);
+  const clear = useProjectStore(s => s.clearSequence);
   const setMode = useProjectStore(s => s.setPreviewMode);
   const invalid = useProjectStore(s => s.invalidClipIds);
+
+  function onClear() {
+    if (!project || project.sequence.length === 0) return;
+    const ok = window.confirm(
+      `Clear all ${project.sequence.length} clip${project.sequence.length === 1 ? '' : 's'} from the sequence? Your clips themselves will not be deleted.`,
+    );
+    if (ok) clear();
+  }
 
   if (!project) return <span className="dim">Sequence</span>;
 
@@ -48,18 +60,39 @@ export function Sequence({ onExportSequence }: { onExportSequence: () => void })
                 const clipId = e.dataTransfer.getData('text/clipId');
                 if (clipId) append(clipId);
               }}
-              onClick={() => remove(i)}
-              title="Click to remove"
+              onClick={() => !isInvalid && setMode({ kind: 'sequence', index: i })}
+              title="Click to play from here · drag to reorder"
               style={{
-                padding: '6px 10px',
+                padding: '6px 6px 6px 10px',
                 background: isInvalid ? 'var(--danger)' : 'var(--accent-2)',
-                border: '1px solid var(--border)',
-                borderRadius: 4,
-                cursor: 'grab',
+                border: isInvalid ? '1px solid var(--border)' : '1px solid var(--accent)',
+                borderRadius: 5,
+                cursor: isInvalid ? 'default' : 'grab',
                 whiteSpace: 'nowrap',
                 opacity: isInvalid ? 0.6 : 1,
-              }}>
-              {clip?.name ?? '???'}
+                display: 'flex', alignItems: 'center', gap: 6,
+                transition: 'background-color 150ms ease, border-color 150ms ease, transform 120ms ease',
+                color: isInvalid ? 'var(--text)' : '#d8f9b3',
+              }}
+              onMouseEnter={e => !isInvalid && (e.currentTarget.style.transform = 'translateY(-1px)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}>
+              <span className="dim" style={{ fontSize: 11 }}>{i + 1}.</span>
+              <span>{clip?.name ?? '???'}</span>
+              <button
+                draggable={false}
+                onDragStart={e => e.preventDefault()}
+                onClick={e => { e.stopPropagation(); remove(i); }}
+                title="Remove from sequence"
+                style={{
+                  padding: '0 6px', minWidth: 20,
+                  background: 'rgba(0,0,0,0.25)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text)',
+                  borderRadius: 3,
+                  fontSize: 12, lineHeight: 1.4,
+                }}>
+                ×
+              </button>
             </div>
           );
         })}
@@ -73,6 +106,18 @@ export function Sequence({ onExportSequence }: { onExportSequence: () => void })
         disabled={project.sequence.length === 0}
         onClick={onExportSequence}>
         Export sequence
+      </button>
+      <button
+        disabled={project.sequence.length === 0}
+        onClick={onExportSequenceInstagram}
+        title="Export 9:16 Instagram Reel of the sequence with auto-tracking on each clip's primary marker">
+        📸 Reel sequence
+      </button>
+      <button
+        disabled={project.sequence.length === 0}
+        onClick={onClear}
+        title="Remove all clips from the sequence (clips themselves are kept)">
+        Clear
       </button>
     </div>
   );

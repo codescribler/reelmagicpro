@@ -9,7 +9,9 @@ import { RightPanel } from './components/RightPanel';
 import { Sequence } from './components/Sequence';
 import { MenuActions } from './components/MenuActions';
 import { ExportProgressModal } from './components/ExportProgressModal';
+import { ExportOptionsModal, ExportOptionsContext, ExportOptionsResult } from './components/ExportOptionsModal';
 import { SettingsModal } from './components/SettingsModal';
+import type { ExportFormat } from '../shared/types';
 import logoUrl from './assets/reelmagic.png';
 
 function fmtTime(s: number): string {
@@ -26,6 +28,11 @@ export function App() {
   const setExportResult = useProjectStore(s => s.setExportResult);
   const [toast, setToast] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exportOpts, setExportOpts] = useState<{
+    context: ExportOptionsContext;
+    initialFormat: ExportFormat;
+    next: (r: ExportOptionsResult) => void;
+  } | null>(null);
 
   // Mirror modal-open state into a ref so the keydown handler (attached once)
   // can read the latest value without re-attaching on every state change.
@@ -108,39 +115,57 @@ export function App() {
     else if (r.error) alert(`Couldn't read this file: ${r.error}`);
   }
 
-  function currentOutroSpec(): { path: string } | undefined {
-    const s = useSettings.getState();
-    if (!s.outroEnabled) return undefined;
-    if (!s.outroPath.trim()) return undefined;
-    return { path: s.outroPath };
+  function openOptionsModal(
+    context: ExportOptionsContext,
+    initialFormat: ExportFormat,
+  ): Promise<ExportOptionsResult> {
+    return new Promise(resolve => {
+      setExportOpts({
+        context, initialFormat,
+        next: r => { setExportOpts(null); resolve(r); },
+      });
+    });
   }
 
-  async function runClipExport(clipId: string) {
+  async function runClipExport(clipId: string, presetFormat: ExportFormat = 'standard') {
     if (!project) return;
     const clip = project.clips.find(c => c.id === clipId);
     if (!clip) return;
-    const out = await window.reelmagic.chooseExportPath(`${clip.name}.mp4`);
+    const opts = await openOptionsModal({ kind: 'clip', clip, source: project.sourceVideo }, presetFormat);
+    if (!opts.ok || !opts.format) return;
+    const suffix = opts.format === 'instagram' ? '_reel' : '';
+    const out = await window.reelmagic.chooseExportPath(`${clip.name}${suffix}.mp4`);
     if (!out.ok || !out.path) return;
     const runId = 'r_' + Math.random().toString(36).slice(2, 10);
     startRun(runId);
     const r = await window.reelmagic.exportClip({
       runId, clip, source: project.sourceVideo, outputPath: out.path,
-      outro: currentOutroSpec(),
+      format: opts.format,
+      instagramOutroPath: useSettings.getState().instagramOutroPath,
     });
     setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
   }
 
-  async function runSequenceExport() {
+  async function runSequenceExport(presetFormat: ExportFormat = 'standard') {
     if (!project) return;
     if (project.sequence.length === 0) return;
-    const out = await window.reelmagic.chooseExportPath('sequence.mp4');
+    const firstClipId = project.sequence[0]!.clipId;
+    const firstClip = project.clips.find(c => c.id === firstClipId);
+    const opts = await openOptionsModal(
+      { kind: 'sequence', firstClip, source: project.sourceVideo },
+      presetFormat,
+    );
+    if (!opts.ok || !opts.format) return;
+    const suffix = opts.format === 'instagram' ? '_reel' : '';
+    const out = await window.reelmagic.chooseExportPath(`sequence${suffix}.mp4`);
     if (!out.ok || !out.path) return;
     const runId = 'r_' + Math.random().toString(36).slice(2, 10);
     startRun(runId);
     const r = await window.reelmagic.exportSequence({
       runId, clips: project.clips, sequence: project.sequence,
       source: project.sourceVideo, outputPath: out.path,
-      outro: currentOutroSpec(),
+      format: opts.format,
+      instagramOutroPath: useSettings.getState().instagramOutroPath,
     });
     setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
   }
@@ -170,12 +195,26 @@ export function App() {
         </div>
       </div>
       <div className="side">
-        <RightPanel onExport={runClipExport} />
+        <RightPanel
+          onExport={(id) => runClipExport(id, 'standard')}
+          onExportInstagram={(id) => runClipExport(id, 'instagram')}
+        />
       </div>
       <div className="seq">
-        <Sequence onExportSequence={runSequenceExport} />
+        <Sequence
+          onExportSequence={() => runSequenceExport('standard')}
+          onExportSequenceInstagram={() => runSequenceExport('instagram')}
+        />
       </div>
       <ExportProgressModal />
+      {exportOpts && (
+        <ExportOptionsModal
+          open
+          initialFormat={exportOpts.initialFormat}
+          context={exportOpts.context}
+          onResolve={exportOpts.next}
+        />
+      )}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       {toast && (
         <div className="toast" style={{
