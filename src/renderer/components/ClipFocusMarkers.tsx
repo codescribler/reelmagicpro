@@ -22,8 +22,17 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
   const addMarker = useProjectStore(s => s.addFocusMarker);
   const updateMarker = useProjectStore(s => s.updateFocusMarker);
   const deleteMarker = useProjectStore(s => s.deleteFocusMarker);
+  const togglePrimaryMarker = useProjectStore(s => s.togglePrimaryMarker);
   const setMode = useProjectStore(s => s.setPreviewMode);
   const project = useProjectStore(s => s.project);
+
+  // Identify which marker drives Instagram framing for this clip.
+  // Explicit primary wins; otherwise the first marker is the implicit driver.
+  // The star UI shows filled / half-faded / outline accordingly.
+  const explicitPrimary = clip.focusMarkers.find(m => m.primary === true);
+  const implicitPrimaryId = explicitPrimary
+    ? explicitPrimary.id
+    : (clip.focusMarkers[0]?.id ?? null);
 
   function handleAdd() {
     if (!project) return;
@@ -63,8 +72,10 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
             marker={m}
             sourceWidth={project?.sourceVideo.width ?? 1}
             sourceHeight={project?.sourceVideo.height ?? 1}
+            implicitPrimary={!m.primary && m.id === implicitPrimaryId}
             onUpdate={patch => updateMarker(clip.id, m.id, patch)}
             onDelete={() => deleteMarker(clip.id, m.id)}
+            onTogglePrimary={() => togglePrimaryMarker(clip.id, m.id)}
             onTrack={() => setMode({ kind: 'track-marker', clipId: clip.id, markerId: m.id })}
             onClearPath={() => updateMarker(clip.id, m.id, { path: undefined })}
           />
@@ -97,13 +108,15 @@ function scaleMarker(
   return { x: newX, y: newY, width: newW, height: newH };
 }
 
-function MarkerRow({ clip, marker, sourceWidth, sourceHeight, onUpdate, onDelete, onTrack, onClearPath }: {
+function MarkerRow({ clip, marker, sourceWidth, sourceHeight, implicitPrimary, onUpdate, onDelete, onTogglePrimary, onTrack, onClearPath }: {
   clip: Clip;
   marker: FocusMarker;
   sourceWidth: number;
   sourceHeight: number;
+  implicitPrimary: boolean;
   onUpdate: (patch: Partial<FocusMarker>) => void;
   onDelete: () => void;
+  onTogglePrimary: () => void;
   onTrack: () => void;
   onClearPath: () => void;
 }) {
@@ -157,6 +170,23 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, onUpdate, onDelete
           background: marker.color,
           border: '1px solid var(--border)',
         }} />
+        <button
+          onClick={onTogglePrimary}
+          title={marker.primary
+            ? 'Primary marker for Instagram framing — click to unset'
+            : implicitPrimary
+              ? 'First marker — drives Instagram framing by default. Click to make explicit.'
+              : 'Set as primary marker for Instagram framing'}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            opacity: marker.primary ? 1 : implicitPrimary ? 0.45 : 0.25,
+            fontSize: 14,
+            padding: '0 2px',
+            color: marker.primary ? 'var(--accent)' : 'var(--text)',
+          }}
+        >★</button>
         <span className="dim" style={{ fontSize: 11, flex: 1 }}>
           in {fmtTime(marker.in)} → out {fmtTime(marker.out)}
         </span>
