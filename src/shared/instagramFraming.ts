@@ -89,3 +89,40 @@ export function buildRawSeries(
 
   return driver.path.map(p => ({ t: p.t, cx: p.cx, cy: p.cy, w, h }));
 }
+
+// Symmetric Gaussian smoothing of a time series. We're operating offline on
+// a known full path, so we can look ahead and behind. Endpoints are NOT held
+// fixed — they get blended too — so a constant prefix/suffix of the input
+// pulls them toward the constant value (which is what we want when the input
+// itself starts at a stable position).
+//
+// O(N²) — paths in this app top out at a few hundred samples, no FFT needed.
+export function gaussianSmoothSeries(
+  samples: IgFramingSample[],
+  sigmaSeconds: number,
+): IgFramingSample[] {
+  if (samples.length === 0) return [];
+  if (sigmaSeconds <= 0 || samples.length === 1) {
+    return samples.map(s => ({ ...s }));
+  }
+  const twoSigmaSq = 2 * sigmaSeconds * sigmaSeconds;
+  return samples.map(centre => {
+    let sumW = 0, cxSum = 0, cySum = 0, wSum = 0, hSum = 0;
+    for (const other of samples) {
+      const dt = other.t - centre.t;
+      const weight = Math.exp(-(dt * dt) / twoSigmaSq);
+      sumW += weight;
+      cxSum += weight * other.cx;
+      cySum += weight * other.cy;
+      wSum  += weight * other.w;
+      hSum  += weight * other.h;
+    }
+    return {
+      t: centre.t,
+      cx: cxSum / sumW,
+      cy: cySum / sumW,
+      w: wSum / sumW,
+      h: hSum / sumW,
+    };
+  });
+}

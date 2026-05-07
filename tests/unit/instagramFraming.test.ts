@@ -1,4 +1,5 @@
-import { pickDrivingMarker, buildRawSeries } from '../../src/shared/instagramFraming';
+import { pickDrivingMarker, buildRawSeries, gaussianSmoothSeries } from '../../src/shared/instagramFraming';
+import type { IgFramingSample } from '../../src/shared/instagramFraming';
 import type { Clip, FocusMarker, SourceMeta } from '../../src/shared/types';
 
 const SRC: SourceMeta = { path: '/in.mp4', duration: 100, width: 1920, height: 1080, fps: 30 };
@@ -89,4 +90,51 @@ test('buildRawSeries clamps oversized markers down to source height', () => {
   };
   const samples = buildRawSeries(clipWith([marker]), SRC, FRAMING_OPTS);
   expect(samples[0]!.h).toBeCloseTo(1080);
+});
+
+test('gaussianSmoothSeries leaves a constant series unchanged', () => {
+  const input: IgFramingSample[] = [
+    { t: 0, cx: 100, cy: 200, w: 540, h: 960 },
+    { t: 1, cx: 100, cy: 200, w: 540, h: 960 },
+    { t: 2, cx: 100, cy: 200, w: 540, h: 960 },
+  ];
+  const out = gaussianSmoothSeries(input, 0.5);
+  expect(out.length).toBe(input.length);
+  for (let i = 0; i < input.length; i++) {
+    expect(out[i]!.cx).toBeCloseTo(100);
+    expect(out[i]!.cy).toBeCloseTo(200);
+  }
+});
+
+test('gaussianSmoothSeries softens a step', () => {
+  const input: IgFramingSample[] = [
+    { t: 0, cx: 0,    cy: 0, w: 540, h: 960 },
+    { t: 1, cx: 0,    cy: 0, w: 540, h: 960 },
+    { t: 2, cx: 1000, cy: 0, w: 540, h: 960 },
+    { t: 3, cx: 1000, cy: 0, w: 540, h: 960 },
+    { t: 4, cx: 1000, cy: 0, w: 540, h: 960 },
+  ];
+  const out = gaussianSmoothSeries(input, 0.5);
+  expect(out[0]!.cx).toBeLessThan(50);
+  expect(out[4]!.cx).toBeGreaterThan(950);
+  expect(out[2]!.cx).toBeGreaterThan(50);
+  expect(out[2]!.cx).toBeLessThan(950);
+});
+
+test('gaussianSmoothSeries with sigma=0 returns the input unchanged', () => {
+  const input: IgFramingSample[] = [
+    { t: 0, cx: 100, cy: 200, w: 540, h: 960 },
+    { t: 1, cx: 800, cy: 400, w: 540, h: 960 },
+  ];
+  const out = gaussianSmoothSeries(input, 0);
+  expect(out[0]!.cx).toBeCloseTo(100);
+  expect(out[1]!.cx).toBeCloseTo(800);
+});
+
+test('gaussianSmoothSeries handles 0/1 sample inputs without NaN', () => {
+  expect(gaussianSmoothSeries([], 0.5)).toEqual([]);
+  const single: IgFramingSample[] = [{ t: 0, cx: 100, cy: 200, w: 540, h: 960 }];
+  const out = gaussianSmoothSeries(single, 0.5);
+  expect(out).toHaveLength(1);
+  expect(Number.isFinite(out[0]!.cx)).toBe(true);
 });
