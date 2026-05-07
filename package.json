@@ -1,6 +1,6 @@
 {
   "name": "reelmagic",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "main": "dist-electron/main/main.js",
   "scripts": {
@@ -38,34 +38,5 @@
     "react-dom": "^18.2.0",
     "zod": "^3.23.0",
     "zustand": "^4.5.0"
-  },
-  "build": {
-    "appId": "com.reelmagic.app",
-    "productName": "ReelMagic",
-    "directories": {
-      "buildResources": "build"
-    },
-    "win": {
-      "icon": "build/icon.png",
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "allowElevation": true
-    },
-    "mac": {
-      "icon": "build/icon.png"
-    },
-    "linux": {
-      "icon": "build/icon.png",
-      "target": "AppImage"
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "Codescribler",
-      "repo": "reelmagicpro"
-    }
   }
 }
