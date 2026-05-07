@@ -38,6 +38,7 @@ interface State {
   addFocusMarker: (clipId: string, marker: FocusMarker) => void;
   updateFocusMarker: (clipId: string, markerId: string, patch: Partial<FocusMarker>) => void;
   deleteFocusMarker: (clipId: string, markerId: string) => void;
+  togglePrimaryMarker: (clipId: string, markerId: string) => void;
 
   addBookmark: (time: number) => void;
   updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
@@ -214,6 +215,25 @@ export const useProjectStore = create<State>((set, get) => ({
     },
     dirty: true,
   }) : state),
+  togglePrimaryMarker: (clipId, markerId) => set(state => {
+    if (!state.project) return state;
+    const clips = state.project.clips.map(c => {
+      if (c.id !== clipId) return c;
+      const target = c.focusMarkers.find(m => m.id === markerId);
+      if (!target) return c;
+      const willBePrimary = !target.primary;
+      // Strip primary cleanly rather than writing `primary: false` so the
+      // saved project file stays minimal.
+      const focusMarkers = c.focusMarkers.map(m => {
+        const next: FocusMarker = { ...m };
+        delete next.primary;
+        if (m.id === markerId && willBePrimary) next.primary = true;
+        return next;
+      });
+      return { ...c, focusMarkers };
+    });
+    return { project: { ...state.project, clips }, dirty: true };
+  }),
   deleteFocusMarker: (clipId, markerId) => set(state => {
     if (!state.project) return state;
     let nextMode = state.previewMode;
