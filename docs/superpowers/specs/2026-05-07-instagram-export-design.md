@@ -196,7 +196,7 @@ A and B share `computeInstagramFraming` — they cannot disagree.
 
 ## Testing
 
-### Unit (Vitest, fast)
+### Unit (Jest, fast — `npm test`)
 
 - `tests/unit/instagramFraming.test.ts` (new)
   - Marker with smooth path → smoothed centres within tolerance of input; no endpoint overshoot.
