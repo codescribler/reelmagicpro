@@ -67,7 +67,39 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           unit="×"
           onChange={v => settings.update({ trackingPlaybackRate: v })}
         />
+        <PathField
+          label="Instagram outro (9:16)"
+          help="Optional. If unset, the standard outro is rescaled with black bars when exporting Instagram videos."
+          value={settings.instagramOutroPath}
+          onPick={async () => {
+            const r = await window.reelmagic.chooseOutroFile();
+            if (r.ok && r.path) settings.update({ instagramOutroPath: r.path });
+          }}
+          onClear={() => settings.update({ instagramOutroPath: undefined })}
+        />
       </div>
+    </div>
+  );
+}
+
+function PathField({ label, help, value, onPick, onClear }: {
+  label: string;
+  help: string;
+  value: string | undefined;
+  onPick: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 600, flex: 1 }}>{label}</span>
+        <button onClick={onPick}>Browse…</button>
+        {value && <button onClick={onClear}>Clear</button>}
+      </div>
+      <span className="dim" style={{ fontSize: 11, wordBreak: 'break-all' }}>
+        {value ?? '(not set)'}
+      </span>
+      <span className="dim" style={{ fontSize: 11 }}>{help}</span>
     </div>
   );
 }
