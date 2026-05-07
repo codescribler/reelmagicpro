@@ -126,3 +126,28 @@ export function gaussianSmoothSeries(
     };
   });
 }
+
+// Clamp each sample so the crop rect fits inside the source. Two stages:
+//   1. If h > source.height or w > source.width, shrink both axes by the
+//      tighter limiting factor (preserves the aspect chosen earlier).
+//   2. Clamp cx/cy so [cx ± w/2, cy ± h/2] sits inside [0, source.{w,h}].
+export function clampSeriesToSource(
+  samples: IgFramingSample[],
+  source: SourceMeta,
+): IgFramingSample[] {
+  return samples.map(s => {
+    let { w, h } = s;
+    const fitW = w > source.width ? source.width / w : 1;
+    const fitH = h > source.height ? source.height / h : 1;
+    const fit = Math.min(fitW, fitH);
+    if (fit < 1) {
+      w = w * fit;
+      h = h * fit;
+    }
+    const halfW = w / 2;
+    const halfH = h / 2;
+    const cx = clamp(s.cx, halfW, source.width - halfW);
+    const cy = clamp(s.cy, halfH, source.height - halfH);
+    return { t: s.t, cx, cy, w, h };
+  });
+}

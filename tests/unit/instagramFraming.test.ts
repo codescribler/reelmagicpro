@@ -1,4 +1,4 @@
-import { pickDrivingMarker, buildRawSeries, gaussianSmoothSeries } from '../../src/shared/instagramFraming';
+import { pickDrivingMarker, buildRawSeries, gaussianSmoothSeries, clampSeriesToSource } from '../../src/shared/instagramFraming';
 import type { IgFramingSample } from '../../src/shared/instagramFraming';
 import type { Clip, FocusMarker, SourceMeta } from '../../src/shared/types';
 
@@ -137,4 +137,32 @@ test('gaussianSmoothSeries handles 0/1 sample inputs without NaN', () => {
   const out = gaussianSmoothSeries(single, 0.5);
   expect(out).toHaveLength(1);
   expect(Number.isFinite(out[0]!.cx)).toBe(true);
+});
+
+test('clampSeriesToSource leaves an in-bounds sample unchanged', () => {
+  const input: IgFramingSample[] = [
+    { t: 0, cx: 960, cy: 540, w: 540, h: 960 },
+  ];
+  const out = clampSeriesToSource(input, SRC);
+  expect(out[0]!.cx).toBe(960);
+  expect(out[0]!.cy).toBe(540);
+});
+
+test('clampSeriesToSource pulls a left-edge centre to keep the rect inside', () => {
+  const input: IgFramingSample[] = [{ t: 0, cx: 100, cy: 540, w: 540, h: 960 }];
+  const out = clampSeriesToSource(input, SRC);
+  expect(out[0]!.cx).toBe(270);
+});
+
+test('clampSeriesToSource pulls a right-edge centre back', () => {
+  const input: IgFramingSample[] = [{ t: 0, cx: 1900, cy: 540, w: 540, h: 960 }];
+  const out = clampSeriesToSource(input, SRC);
+  expect(out[0]!.cx).toBe(SRC.width - 270);
+});
+
+test('clampSeriesToSource shrinks rect that exceeds source bounds, preserving aspect', () => {
+  const input: IgFramingSample[] = [{ t: 0, cx: 960, cy: 540, w: 1125, h: 2000 }];
+  const out = clampSeriesToSource(input, SRC);
+  expect(out[0]!.h).toBe(1080);
+  expect(out[0]!.w).toBeCloseTo(1125 * (1080 / 2000), 3);
 });
