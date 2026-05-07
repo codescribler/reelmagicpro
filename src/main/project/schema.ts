@@ -21,6 +21,7 @@ const FocusMarkerSchema = z.object({
   shape: z.enum(['rect', 'oval']).optional(),
   label: z.string().optional(),
   path: z.array(FocusMarkerPathPointSchema).optional(),
+  primary: z.boolean().optional(),
 });
 const SourceSchema = z.object({
   path: z.string(),

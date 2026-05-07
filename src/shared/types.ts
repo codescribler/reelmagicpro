@@ -36,6 +36,11 @@ export interface FocusMarker {
   // along this path; x/y above are ignored. The list is sorted by t ascending.
   // Times are clip-relative (t=0 corresponds to clip.in).
   path?: FocusMarkerPathPoint[];
+  // Optional flag identifying this marker as the driver for Instagram-format
+  // export framing on multi-marker clips. At most one marker per clip should
+  // have this set. When no marker is flagged, IG framing falls back to the
+  // first marker.
+  primary?: boolean;
 }
 
 export interface Clip {

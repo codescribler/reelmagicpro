@@ -80,3 +80,30 @@ test('rejects unknown version', () => {
 test('rejects malformed input', () => {
   expect(() => parseAndClampProject({ foo: 'bar' })).toThrow();
 });
+
+test('FocusMarker primary flag round-trips through parseAndClampProject', () => {
+  const p = {
+    ...baseProject,
+    clips: [{
+      ...baseClip,
+      focusMarkers: [
+        { id: 'm1', x: 0, y: 0, width: 80, height: 80, in: 10, out: 20, color: 'yellow', primary: true },
+        { id: 'm2', x: 0, y: 0, width: 80, height: 80, in: 10, out: 20, color: 'red' },
+      ],
+    }],
+  };
+  const r = parseAndClampProject(p);
+  expect(r.project.clips[0]!.focusMarkers[0]!.primary).toBe(true);
+  expect(r.project.clips[0]!.focusMarkers[1]!.primary).toBeUndefined();
+});
+
+test('FocusMarker without primary field still parses (backwards-compat)', () => {
+  const p = {
+    ...baseProject,
+    clips: [{
+      ...baseClip,
+      focusMarkers: [{ id: 'm1', x: 0, y: 0, width: 80, height: 80, in: 10, out: 20, color: 'yellow' }],
+    }],
+  };
+  expect(() => parseAndClampProject(p)).not.toThrow();
+});
