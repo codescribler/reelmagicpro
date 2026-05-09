@@ -15,7 +15,6 @@ export function EmptyState({
     <div className="empty-state">
       <div className="empty-state-inner">
         <img src={logoUrl} alt="ReelMagic" className="empty-state-logo" />
-        <h1 className="empty-state-title">ReelMagic</h1>
         <p className="empty-state-tagline">
           Turn match footage into highlight reels of your kid.
         </p>

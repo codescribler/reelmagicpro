@@ -234,19 +234,13 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   gap: 14px;
 }
 .empty-state-logo {
-  height: 72px;
+  height: 288px;
   width: auto;
   display: block;
 }
-.empty-state-title {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
 .empty-state-tagline {
-  margin: 0 0 12px 0;
-  color: var(--muted);
+  margin: -18px 0 12px 0;
+  color: #c0c4cc;
   font-size: 15px;
   line-height: 1.5;
 }
