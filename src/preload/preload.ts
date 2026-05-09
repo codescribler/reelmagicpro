@@ -3,6 +3,7 @@ import type {
   OpenSourceVideoResult, SaveProjectArgs, SaveProjectResult,
   LoadProjectResult, ExportClipArgs, ExportSequenceArgs, ExportProgress, ExportResult,
   DownloadVeoVideoArgs, VeoDownloadProgress, VeoDownloadResult,
+  LicenceState,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('reelmagic', {
@@ -36,5 +37,23 @@ contextBridge.exposeInMainWorld('reelmagic', {
     const handler = (_: unknown, p: VeoDownloadProgress) => cb(p);
     ipcRenderer.on('app:veoDownloadProgress', handler);
     return () => ipcRenderer.removeListener('app:veoDownloadProgress', handler);
+  },
+  licence: {
+    getState: (): Promise<LicenceState> => ipcRenderer.invoke('app:licence:getState'),
+    startActivation: (): Promise<void> =>
+      ipcRenderer.invoke('app:licence:startActivation').then(() => undefined),
+    cancelActivation: (): Promise<void> =>
+      ipcRenderer.invoke('app:licence:cancelActivation').then(() => undefined),
+    recheck: (): Promise<void> =>
+      ipcRenderer.invoke('app:licence:recheck').then(() => undefined),
+    signOut: (): Promise<void> =>
+      ipcRenderer.invoke('app:licence:signOut').then(() => undefined),
+    openAccountPage: (): Promise<void> =>
+      ipcRenderer.invoke('app:licence:openAccountPage').then(() => undefined),
+    onChange: (cb: (s: LicenceState) => void) => {
+      const handler = (_: unknown, s: LicenceState) => cb(s);
+      ipcRenderer.on('app:licence:state', handler);
+      return () => ipcRenderer.removeListener('app:licence:state', handler);
+    },
   },
 });

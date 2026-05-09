@@ -148,3 +148,38 @@ export interface VeoDownloadResult {
   path?: string;
   error?: string;
 }
+
+// --- Licence ----------------------------------------------------------------
+
+export type LicencePlatform = 'win' | 'mac' | 'linux';
+
+export type LicenceStatus = 'comp' | 'active' | 'past_due';
+
+export interface StoredLicence {
+  token: string;
+  validUntil: number;
+  status: LicenceStatus;
+}
+
+// Renderer-facing snapshot. The token itself never crosses IPC.
+export type LicenceState =
+  | { kind: 'initialising' }
+  | { kind: 'unlocked'; status: LicenceStatus; validUntil: number }
+  // `error` carries the reason the previous attempt failed (network, malformed
+  // response). The gate shows it under the Activate button so silent failures
+  // can't happen.
+  | { kind: 'needs_activation'; error?: string }
+  // Brief state between click and the server returning a code. Surfaces as
+  // "Requesting activation code…" so the user knows something is happening.
+  | { kind: 'requesting_activation' }
+  | { kind: 'activating'; code: string; activationUrl: string; expiresAt: number }
+  | { kind: 'locked'; reason: string }
+  | { kind: 'offline_locked' }
+  // Encryption isn't available on this OS (e.g. headless Linux without a keyring).
+  | { kind: 'unsupported' };
+
+export interface ActivationStartedEvent {
+  code: string;
+  activationUrl: string;
+  expiresAt: number;
+}

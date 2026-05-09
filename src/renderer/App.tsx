@@ -11,6 +11,8 @@ import { MenuActions } from './components/MenuActions';
 import { ExportProgressModal } from './components/ExportProgressModal';
 import { SettingsModal } from './components/SettingsModal';
 import { EmptyState } from './components/EmptyState';
+import { LicenceGate } from './components/LicenceGate';
+import { useLicenceStore, useLicenceSubscription } from './state/licence';
 import { loadProjectInteractive } from './state/loadProject';
 import logoUrl from './assets/reelmagic.png';
 
@@ -21,6 +23,13 @@ function fmtTime(s: number): string {
 }
 
 export function App() {
+  useLicenceSubscription();
+  const licence = useLicenceStore(s => s.state);
+  if (licence.kind !== 'unlocked') return <LicenceGate state={licence} />;
+  return <Editor pastDue={licence.status === 'past_due'} />;
+}
+
+function Editor({ pastDue }: { pastDue: boolean }) {
   const project = useProjectStore(s => s.project);
   const dirty = useProjectStore(s => s.dirty);
   const setSource = useProjectStore(s => s.setSource);
@@ -212,7 +221,20 @@ export function App() {
         <button onClick={handleOpen}>Open video…</button>
         <span className="dim">{project ? project.sourceVideo.path : 'no source'}</span>
         {dirty && <span className="dim">●</span>}
-        <button onClick={() => setSettingsOpen(true)} style={{ marginLeft: 'auto' }} title="Settings">
+        {pastDue && (
+          <button
+            onClick={() => window.reelmagic.licence.openAccountPage()}
+            style={{ marginLeft: 'auto', borderColor: '#d97706', color: '#fde68a' }}
+            title="Your last payment failed — update your card to keep your subscription active"
+          >
+            ⚠ Update payment
+          </button>
+        )}
+        <button
+          onClick={() => setSettingsOpen(true)}
+          style={pastDue ? undefined : { marginLeft: 'auto' }}
+          title="Settings"
+        >
           ⚙ Settings
         </button>
       </div>

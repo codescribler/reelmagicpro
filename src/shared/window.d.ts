@@ -10,6 +10,7 @@ import type {
   DownloadVeoVideoArgs,
   VeoDownloadProgress,
   VeoDownloadResult,
+  LicenceState,
 } from './types';
 
 declare global {
@@ -28,6 +29,15 @@ declare global {
       downloadVeoVideo: (args: DownloadVeoVideoArgs) => Promise<VeoDownloadResult>;
       cancelVeoDownload: (runId: string) => Promise<{ ok: boolean }>;
       onVeoDownloadProgress: (cb: (p: VeoDownloadProgress) => void) => () => void;
+      licence: {
+        getState: () => Promise<LicenceState>;
+        startActivation: () => Promise<void>;
+        cancelActivation: () => Promise<void>;
+        recheck: () => Promise<void>;
+        signOut: () => Promise<void>;
+        openAccountPage: () => Promise<void>;
+        onChange: (cb: (s: LicenceState) => void) => () => void;
+      };
     };
   }
 }

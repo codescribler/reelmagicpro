@@ -506,3 +506,42 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   to   { opacity: 1; transform: translateY(0); }
 }
 .toast { animation: toast-in 200ms ease-out; }
+
+/* Activation code chip in the licence gate. Bigger than the surrounding text
+   because the user reads it once on this screen and never again. */
+.licence-code {
+  font: 600 22px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid var(--accent-strong);
+  border-radius: 8px;
+  padding: 12px 18px;
+  margin: 4px 0 4px 0;
+}
+
+/* Thin banner shown above the menubar when the subscription is past-due but
+   still in grace. Non-blocking; the editor remains fully usable. */
+.past-due-banner {
+  background: #4a2a08;
+  border: 1px solid #d97706;
+  color: #fde68a;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.past-due-banner button {
+  background: transparent;
+  border: 1px solid #fde68a;
+  color: #fde68a;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.past-due-banner button:hover:not(:disabled) {
+  background: rgba(253, 230, 138, 0.12);
+  border-color: #fde68a;
+}
