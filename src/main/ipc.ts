@@ -3,13 +3,16 @@ import fs from 'fs/promises';
 import { probeVideo } from './ffmpeg/probe';
 import { exportClip, exportSequence } from './ffmpeg/exporter';
 import { saveProject, loadProject } from './project/io';
+import { downloadVeoVideo } from './veo/download';
 import type {
   OpenSourceVideoResult, SaveProjectArgs, SaveProjectResult,
   LoadProjectResult, ExportClipArgs, ExportSequenceArgs, ExportProgress,
+  DownloadVeoVideoArgs, VeoDownloadProgress, VeoDownloadResult,
 } from '../shared/types';
 
 // Maps runId → { ctrl, finished } — finished is the IPC handler's promise so we
-// can await it on quit-time abort.
+// can await it on quit-time abort. Used for both ffmpeg exports and Veo
+// downloads so a single quit-time drain stops everything in flight.
 const activeRuns = new Map<string, { ctrl: AbortController; finished: Promise<unknown> }>();
 
 export async function abortAllExports(): Promise<void> {
@@ -21,6 +24,8 @@ export async function abortAllExports(): Promise<void> {
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   const sendProgress = (p: ExportProgress) => getWindow()?.webContents.send('app:exportProgress', p);
+  const sendVeoProgress = (p: VeoDownloadProgress) =>
+    getWindow()?.webContents.send('app:veoDownloadProgress', p);
 
   ipcMain.handle('app:openSourceVideo', async (): Promise<OpenSourceVideoResult> => {
     const win = getWindow();
@@ -134,6 +139,35 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
 
   ipcMain.handle('app:cancelExport', async (_e, runId: string) => {
+    const entry = activeRuns.get(runId);
+    if (entry) entry.ctrl.abort();
+    return { ok: true };
+  });
+
+  ipcMain.handle(
+    'app:downloadVeoVideo',
+    async (_e, args: DownloadVeoVideoArgs): Promise<VeoDownloadResult> => {
+      const ctrl = new AbortController();
+      const work = (async () => {
+        try {
+          return await downloadVeoVideo({
+            runId: args.runId,
+            url: args.url,
+            onProgress: sendVeoProgress,
+            signal: ctrl.signal,
+          });
+        } catch (e: any) {
+          return { ok: false, error: e?.message ?? String(e) } as VeoDownloadResult;
+        } finally {
+          activeRuns.delete(args.runId);
+        }
+      })();
+      activeRuns.set(args.runId, { ctrl, finished: work });
+      return work;
+    },
+  );
+
+  ipcMain.handle('app:cancelVeoDownload', async (_e, runId: string) => {
     const entry = activeRuns.get(runId);
     if (entry) entry.ctrl.abort();
     return { ok: true };

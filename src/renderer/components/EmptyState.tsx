@@ -2,10 +2,12 @@ import React from 'react';
 import logoUrl from '../assets/reelmagic.png';
 
 // First-run / no-project hero. Shown whenever there is no project loaded.
-// Single primary CTA ("Open a video") so a first-time user can't miss the one
-// action that matters; "Open a saved project" tucked underneath as a secondary
-// link for returning users.
-export function EmptyState({ onOpenVideo, onOpenProject }: {
+// One way in: open a local file. "Open a saved project" is tucked underneath
+// as a secondary link for returning users.
+export function EmptyState({
+  onOpenVideo,
+  onOpenProject,
+}: {
   onOpenVideo: () => void;
   onOpenProject: () => void;
 }) {
@@ -24,6 +26,7 @@ export function EmptyState({ onOpenVideo, onOpenProject }: {
         >
           📁 Open a video
         </button>
+
         <button className="empty-state-secondary" onClick={onOpenProject}>
           Open a saved project
         </button>

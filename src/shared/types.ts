@@ -130,3 +130,21 @@ export interface ExportSequenceArgs {
   format?: ExportFormat;
   instagramOutroPath?: string;
 }
+
+// "Paste a Veo link" flow: app fetches the page, scrapes the video URL,
+// streams it to ~/Downloads, then probes it like any opened source.
+export type VeoDownloadPhase = 'fetching-page' | 'downloading' | 'probing';
+export interface VeoDownloadProgress {
+  runId: string;
+  phase: VeoDownloadPhase;
+  bytesDownloaded: number;
+  totalBytes: number | null; // null until Content-Length is known (or omitted)
+  percent: number;           // 0–100; 0 while indeterminate
+}
+export interface DownloadVeoVideoArgs { runId: string; url: string; }
+export interface VeoDownloadResult {
+  ok: boolean;
+  source?: SourceMeta;
+  path?: string;
+  error?: string;
+}

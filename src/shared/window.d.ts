@@ -7,6 +7,9 @@ import type {
   ExportSequenceArgs,
   ExportProgress,
   ExportResult,
+  DownloadVeoVideoArgs,
+  VeoDownloadProgress,
+  VeoDownloadResult,
 } from './types';
 
 declare global {
@@ -22,6 +25,9 @@ declare global {
       chooseExportPath: (suggestedName: string) => Promise<{ ok: boolean; path?: string }>;
       chooseOutroFile: () => Promise<{ ok: boolean; path?: string }>;
       onExportProgress: (cb: (p: ExportProgress) => void) => () => void;
+      downloadVeoVideo: (args: DownloadVeoVideoArgs) => Promise<VeoDownloadResult>;
+      cancelVeoDownload: (runId: string) => Promise<{ ok: boolean }>;
+      onVeoDownloadProgress: (cb: (p: VeoDownloadProgress) => void) => () => void;
     };
   }
 }

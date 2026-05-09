@@ -5,9 +5,8 @@ import { ClipEditor } from './ClipEditor';
 // Full-panel clip editor. Replaces the clip list when a clip is selected.
 // The Back button clears the selection (and resets the preview to source),
 // returning the panel to the list view.
-export function ClipDetail({ onExport, onExportInstagram }: {
+export function ClipDetail({ onExport }: {
   onExport: (id: string) => void;
-  onExportInstagram: (id: string) => void;
 }) {
   const project = useProjectStore(s => s.project);
   const selectedId = useProjectStore(s => s.selectedClipId);
@@ -81,9 +80,6 @@ export function ClipDetail({ onExport, onExportInstagram }: {
             disabled={isInv}
             onClick={() => onExport(clip.id)}>
             Export clip…
-          </button>
-          <button disabled={isInv} onClick={() => onExportInstagram(clip.id)} title="Export 9:16 Instagram Reel with auto-tracking on the primary marker">
-            📸 Reel…
           </button>
           <button
             disabled={isInv}

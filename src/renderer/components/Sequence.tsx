@@ -1,9 +1,8 @@
 import React from 'react';
 import { useProjectStore } from '../state/projectStore';
 
-export function Sequence({ onExportSequence, onExportSequenceInstagram }: {
+export function Sequence({ onExportSequence }: {
   onExportSequence: () => void;
-  onExportSequenceInstagram: () => void;
 }) {
   const project = useProjectStore(s => s.project);
   const append = useProjectStore(s => s.appendToSequence);
@@ -106,12 +105,6 @@ export function Sequence({ onExportSequence, onExportSequenceInstagram }: {
         disabled={project.sequence.length === 0}
         onClick={onExportSequence}>
         Export sequence
-      </button>
-      <button
-        disabled={project.sequence.length === 0}
-        onClick={onExportSequenceInstagram}
-        title="Export 9:16 Instagram Reel of the sequence with auto-tracking on each clip's primary marker">
-        📸 Reel sequence
       </button>
       <button
         disabled={project.sequence.length === 0}

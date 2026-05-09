@@ -77,7 +77,7 @@ This is now a **pre-launch landing page**, not a buy-now site. Pricing is undeci
 
 **Sub-line beneath the button:**
 
-> Founding members get a free year + first dibs on the app.
+> Founding members get a discount + first dibs on the app.
 
 **Hero image direction:**
 Aspirational outcome — finished reel playing on an iPhone in a parent's hand, child in club kit visible mid-skill on screen. NOT a UI screenshot. NOT stock photos of office or team. Warm, real, sideline-feel.
@@ -169,7 +169,8 @@ One clip, or the full sequence as a single mp4. Pick standard 16:9 for the scout
 ReelMagicPro launches for the 2026/27 season. Join the early-access list and you'll get:
 
 - **First access** when the app opens — before public release
-- **A founding-member discount** — a free year for the first signups *(exact terms locked closer to launch)*
+- **Free early access for a select few** — some signups will be invited to try ReelMagicPro before launch
+- **A founding-member discount** — the first signups get the best price *(exact terms locked closer to launch)*
 - **A say in what ships next** — direct line to the founder; the roadmap is shaped by founding members
 
 No card. No spam. Just an email when it's ready.
