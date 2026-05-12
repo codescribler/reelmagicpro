@@ -6,6 +6,14 @@ export interface SourceMeta {
   fps: number;
 }
 
+// A source video entry within a multi-source project. Extends SourceMeta with
+// a stable id (used by clips / bookmarks to reference their owning source)
+// and an optional user-given name (defaults to the file basename in the UI).
+export interface SourceVideo extends SourceMeta {
+  id: string;
+  name?: string;
+}
+
 export interface ZoomRect {
   x: number;
   y: number;
@@ -67,6 +75,10 @@ export interface Clip {
   // Stacks with Project.sequenceBrightness during sequence export. Optional
   // and undefined = no adjustment so old projects load unchanged.
   brightness?: number;
+  // Owning source video. Optional for back-compat — undefined resolves to
+  // `project.sources[0]`. New projects with multiple sources set this
+  // explicitly; legacy single-source projects leave it undefined.
+  sourceId?: string;
 }
 
 export interface SequenceEntry {
@@ -78,11 +90,21 @@ export interface Bookmark {
   time: number;       // source-time seconds
   label?: string;     // optional user-given name
   createdAt: number;  // ms epoch — used for stable ordering of same-time bookmarks
+  // Owning source video. Same back-compat rule as Clip.sourceId — undefined
+  // resolves to `project.sources[0]`.
+  sourceId?: string;
 }
 
+// Project shape (in-memory). On disk the project is serialised as either v1
+// (single `sourceVideo`, no `sources`, no per-clip/bookmark `sourceId`s) or
+// v2 (`sources` array, optional `sourceId`s). The in-memory shape always
+// carries BOTH `sourceVideo` (a mirror of `sources[0]`) AND the canonical
+// `sources` array, so existing read sites that say `project.sourceVideo`
+// continue to compile and resolve to the primary source.
 export interface Project {
-  version: 1;
+  version: 1 | 2;
   sourceVideo: SourceMeta;
+  sources: SourceVideo[];
   clips: Clip[];
   sequence: SequenceEntry[];
   bookmarks: Bookmark[];

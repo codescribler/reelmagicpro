@@ -1,5 +1,17 @@
 import { create } from 'zustand';
-import type { Project, Clip, SourceMeta, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack } from '../../shared/types';
+import type { Project, Clip, SourceMeta, SourceVideo, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack } from '../../shared/types';
+import { newSourceId, resolveSource } from '../../shared/resolveSource';
+
+// Strip a SourceVideo down to the plain SourceMeta fields used by the
+// in-memory `project.sourceVideo` mirror. Matches parseAndClampProject's
+// behaviour so the in-memory shape is consistent regardless of whether the
+// project was loaded from disk or built up by the store actions below.
+function toSourceMeta(sv: { path: string; duration: number; width: number; height: number; fps: number }): SourceMeta {
+  return {
+    path: sv.path, duration: sv.duration,
+    width: sv.width, height: sv.height, fps: sv.fps,
+  };
+}
 
 export type PreviewMode =
   | { kind: 'idle' }
@@ -27,10 +39,22 @@ interface State {
   // clicked the button on the right panel.
   sequenceAppendToken: number;
 
+  // Which source is currently loaded into the preview / timeline. Always
+  // points to a source in the project's sources array (or null when no
+  // project is open). Used by Phase-2 UI to pick which video the <video>
+  // element should load and which source's clips / bookmarks belong to the
+  // timeline at any moment.
+  activeSourceId: string | null;
+
   setProject: (p: Project | null, path?: string | null) => void;
   setProjectPath: (path: string | null) => void;
   markClean: () => void;
   setSource: (s: SourceMeta) => void;
+  addSource: (s: SourceMeta, opts?: { name?: string }) => string;
+  removeSource: (sourceId: string, opts?: { cascade?: boolean }) => { ok: boolean; reason?: string };
+  renameSource: (sourceId: string, name: string) => void;
+  reorderSources: (from: number, to: number) => void;
+  setActiveSourceId: (sourceId: string) => void;
   addClip: (clip: Clip) => void;
   updateClip: (id: string, patch: Partial<Clip>) => void;
   deleteClip: (id: string) => void;
@@ -109,6 +133,7 @@ export const useProjectStore = create<State>((set, get) => ({
   invalidClipIds: new Set(),
   clipCreatedToken: 0,
   sequenceAppendToken: 0,
+  activeSourceId: null,
 
   setProject: (p, path) => set({
     // Normalize on entry so older project files (or a stale main bundle
@@ -117,16 +142,172 @@ export const useProjectStore = create<State>((set, get) => ({
     project: p ? { ...p, bookmarks: p.bookmarks ?? [] } : null,
     projectPath: path ?? null, dirty: false,
     selectedClipId: null, previewMode: p ? { kind: 'source' } : { kind: 'idle' },
+    activeSourceId: p?.sources[0]?.id ?? null,
   }),
   setProjectPath: (path) => set({ projectPath: path }),
   markClean: () => set({ dirty: false }),
-  setSource: (s) => set(state => ({
-    project: state.project
-      ? { ...state.project, sourceVideo: s }
-      : { version: 1, sourceVideo: s, clips: [], sequence: [], bookmarks: [] },
-    dirty: true,
-    previewMode: { kind: 'source' },
-  })),
+  // First-source / replace-source entry point used by the empty-state CTA
+  // and the Open-video menu item. Creates a fresh project when none exists,
+  // or replaces the sole source when one does. To ADD a second source to an
+  // existing project, callers should use addSource() instead — set up in
+  // Phase 2's UI.
+  setSource: (s) => set(state => {
+    const id = newSourceId();
+    const newSource: SourceVideo = { id, ...s };
+    if (!state.project) {
+      return {
+        project: {
+          version: 1,
+          sourceVideo: s,
+          sources: [newSource],
+          clips: [], sequence: [], bookmarks: [],
+        },
+        dirty: true,
+        previewMode: { kind: 'source' },
+        activeSourceId: id,
+      };
+    }
+    // Existing project: replace the primary source (and its sources[0]) but
+    // keep clips / bookmarks / sequence intact. This matches pre-Phase-1
+    // behaviour where "open a video" with a project already in place
+    // swapped the underlying file. Phase 2's UI will route any "add another
+    // video" affordance through addSource() instead so this code path
+    // really does mean "replace."
+    return {
+      project: {
+        ...state.project,
+        sourceVideo: s,
+        sources: [newSource, ...state.project.sources.slice(1)],
+      },
+      dirty: true,
+      previewMode: { kind: 'source' },
+      activeSourceId: id,
+    };
+  }),
+
+  addSource: (s, opts) => {
+    const id = newSourceId();
+    const sv: SourceVideo = { id, ...s, ...(opts?.name ? { name: opts.name } : {}) };
+    set(state => {
+      if (!state.project) {
+        return {
+          project: {
+            version: 1,
+            sourceVideo: s,
+            sources: [sv],
+            clips: [], sequence: [], bookmarks: [],
+          },
+          dirty: true,
+          previewMode: { kind: 'source' },
+          activeSourceId: id,
+        };
+      }
+      const sources = [...state.project.sources, sv];
+      return {
+        project: { ...state.project, sources },
+        dirty: true,
+        // Switch the preview to the freshly-added source — matches the user
+        // expectation that "I just imported this video, I want to see it."
+        previewMode: { kind: 'source' },
+        activeSourceId: id,
+        selectedClipId: null,
+      };
+    });
+    return id;
+  },
+
+  removeSource: (sourceId, opts) => {
+    const state = get();
+    if (!state.project) return { ok: false, reason: 'no_project' };
+    const sources = state.project.sources;
+    if (sources.length <= 1) return { ok: false, reason: 'last_source' };
+    const idx = sources.findIndex(s => s.id === sourceId);
+    if (idx < 0) return { ok: false, reason: 'unknown' };
+    const usedByClips = state.project.clips.some(c =>
+      (c.sourceId ?? sources[0]!.id) === sourceId
+    );
+    const usedByBookmarks = state.project.bookmarks.some(b =>
+      (b.sourceId ?? sources[0]!.id) === sourceId
+    );
+    if ((usedByClips || usedByBookmarks) && !opts?.cascade) {
+      return { ok: false, reason: 'in_use' };
+    }
+    set(s => {
+      if (!s.project) return s;
+      const nextSources = s.project.sources.filter(src => src.id !== sourceId);
+      const removedClipIds = new Set(
+        s.project.clips
+          .filter(c => (c.sourceId ?? s.project!.sources[0]!.id) === sourceId)
+          .map(c => c.id),
+      );
+      const clips = s.project.clips.filter(c => !removedClipIds.has(c.id));
+      const bookmarks = s.project.bookmarks.filter(b =>
+        (b.sourceId ?? s.project!.sources[0]!.id) !== sourceId
+      );
+      const sequence = s.project.sequence.filter(e => !removedClipIds.has(e.clipId));
+      const newPrimary = nextSources[0]!;
+      const nextActive = s.activeSourceId === sourceId ? newPrimary.id : s.activeSourceId;
+      return {
+        project: {
+          ...s.project,
+          sourceVideo: toSourceMeta(newPrimary),
+          sources: nextSources,
+          clips, bookmarks, sequence,
+        },
+        activeSourceId: nextActive,
+        selectedClipId: s.selectedClipId && removedClipIds.has(s.selectedClipId)
+          ? null : s.selectedClipId,
+        dirty: true,
+      };
+    });
+    return { ok: true };
+  },
+
+  renameSource: (sourceId, name) => set(state => {
+    if (!state.project) return state;
+    const trimmed = name.trim();
+    return {
+      project: {
+        ...state.project,
+        sources: state.project.sources.map(src =>
+          src.id === sourceId
+            ? (trimmed ? { ...src, name: trimmed } : (() => {
+                const { name: _drop, ...rest } = src; return rest;
+              })())
+            : src
+        ),
+      },
+      dirty: true,
+    };
+  }),
+
+  reorderSources: (from, to) => set(state => {
+    if (!state.project) return state;
+    const sources = [...state.project.sources];
+    if (from < 0 || from >= sources.length || to < 0 || to >= sources.length) return state;
+    const [moved] = sources.splice(from, 1);
+    if (moved) sources.splice(to, 0, moved);
+    // Reordering can change which source is sources[0], the implicit
+    // default. Update sourceVideo to match so renderer reads stay
+    // consistent.
+    return {
+      project: { ...state.project, sources, sourceVideo: toSourceMeta(sources[0]!) },
+      dirty: true,
+    };
+  }),
+
+  setActiveSourceId: (sourceId) => set(state => {
+    if (!state.project) return state;
+    if (!state.project.sources.some(s => s.id === sourceId)) return state;
+    return {
+      activeSourceId: sourceId,
+      // Switching sources implicitly returns to source-mode playback for
+      // that source. Selected clip is cleared so the editor doesn't keep
+      // showing a clip from a different source.
+      selectedClipId: null,
+      previewMode: { kind: 'source' },
+    };
+  }),
   addClip: (clip) => set(state => state.project ? ({
     project: { ...state.project, clips: [...state.project.clips, clip] },
     dirty: true,

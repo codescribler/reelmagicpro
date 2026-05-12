@@ -1,4 +1,5 @@
 import { parseAndClampProject } from '../../src/main/project/schema';
+import { serializeProject } from '../../src/main/project/io';
 
 const baseSource = { path: 'X', duration: 100, width: 1920, height: 1080, fps: 30 };
 const baseClip = {
@@ -11,6 +12,107 @@ test('round-trips a valid project (focusMarkers default to [])', () => {
   const r = parseAndClampProject(baseProject);
   expect(r.project.clips[0]!.focusMarkers).toEqual([]);
   expect(r.warnings).toEqual([]);
+});
+
+test('v1 load: synthesises a sources array from sourceVideo with a stable id', () => {
+  const r = parseAndClampProject(baseProject);
+  expect(r.project.sources).toHaveLength(1);
+  expect(r.project.sources[0]!.path).toBe('X');
+  expect(r.project.sources[0]!.duration).toBe(100);
+  expect(r.project.sources[0]!.id).toMatch(/^src_/);
+  // Primary mirror points at sources[0] so existing `project.sourceVideo`
+  // read sites continue to compile.
+  expect(r.project.sourceVideo).toEqual({ ...baseSource });
+});
+
+test('v1 round-trip: a single-source project saves back as v1 (no sources field)', () => {
+  // Critical for back-compat: existing users' .rmproj files must survive a
+  // round-trip through the new code without gaining unfamiliar fields.
+  const r = parseAndClampProject(baseProject);
+  const serialized = serializeProject(r.project) as any;
+  expect(serialized.version).toBe(1);
+  expect(serialized.sources).toBeUndefined();
+  expect(serialized.sourceVideo).toEqual(baseSource);
+  // Clips don't carry sourceId on disk in the v1 shape.
+  expect(serialized.clips[0].sourceId).toBeUndefined();
+});
+
+test('v2 load: project with multiple sources parses and exposes both shapes', () => {
+  const v2 = {
+    version: 2,
+    sources: [
+      { id: 'src_a', path: 'A.mp4', duration: 60, width: 1920, height: 1080, fps: 30 },
+      { id: 'src_b', path: 'B.mp4', duration: 90, width: 1280, height: 720, fps: 25, name: 'Match 2' },
+    ],
+    clips: [
+      { ...baseClip, id: 'c1', sourceId: 'src_a' },
+      { ...baseClip, id: 'c2', sourceId: 'src_b', zoom: { x: 0, y: 0, width: 1280, height: 720 } },
+    ],
+    sequence: [{ clipId: 'c1' }, { clipId: 'c2' }],
+    bookmarks: [
+      { id: 'b1', time: 30, createdAt: 1, sourceId: 'src_a' },
+      { id: 'b2', time: 45, createdAt: 2, sourceId: 'src_b' },
+    ],
+  };
+  const r = parseAndClampProject(v2);
+  expect(r.project.sources).toHaveLength(2);
+  expect(r.project.sources[1]!.name).toBe('Match 2');
+  expect(r.project.clips[0]!.sourceId).toBe('src_a');
+  expect(r.project.clips[1]!.sourceId).toBe('src_b');
+  expect(r.project.bookmarks).toHaveLength(2);
+});
+
+test('v2 round-trip: a multi-source project saves back as v2 (no legacy sourceVideo field)', () => {
+  const v2 = {
+    version: 2,
+    sources: [
+      { id: 'src_a', path: 'A.mp4', duration: 60, width: 1920, height: 1080, fps: 30 },
+      { id: 'src_b', path: 'B.mp4', duration: 90, width: 1280, height: 720, fps: 25 },
+    ],
+    clips: [{ ...baseClip, sourceId: 'src_b', zoom: { x: 0, y: 0, width: 1280, height: 720 } }],
+    sequence: [],
+  };
+  const r = parseAndClampProject(v2);
+  const serialized = serializeProject(r.project) as any;
+  expect(serialized.version).toBe(2);
+  expect(serialized.sourceVideo).toBeUndefined();
+  expect(serialized.sources).toHaveLength(2);
+  expect(serialized.clips[0].sourceId).toBe('src_b');
+});
+
+test('per-source clamping: a clip in source B respects B\'s duration, not the primary\'s', () => {
+  // Source A is 60s; source B is 90s. A clip whose out is 80 (valid for B,
+  // would be invalid against A) must clamp against its OWN source — the
+  // legacy single-source clamping would wrongly trim it to 60.
+  const v2 = {
+    version: 2,
+    sources: [
+      { id: 'src_a', path: 'A.mp4', duration: 60, width: 1920, height: 1080, fps: 30 },
+      { id: 'src_b', path: 'B.mp4', duration: 90, width: 1280, height: 720, fps: 25 },
+    ],
+    clips: [{
+      ...baseClip,
+      sourceId: 'src_b',
+      in: 5, out: 80,
+      zoom: { x: 0, y: 0, width: 1280, height: 720 },
+    }],
+    sequence: [],
+  };
+  const r = parseAndClampProject(v2);
+  expect(r.project.clips[0]!.out).toBe(80);
+  expect(r.warnings).toEqual([]);
+});
+
+test('a clip with a sourceId that points to a missing source is flagged invalid', () => {
+  const v2 = {
+    version: 2,
+    sources: [{ id: 'src_a', path: 'A.mp4', duration: 60, width: 1920, height: 1080, fps: 30 }],
+    clips: [{ ...baseClip, sourceId: 'src_ghost', out: 30 }],
+    sequence: [],
+  };
+  const r = parseAndClampProject(v2);
+  expect(r.invalidClipIds).toContain('c1');
+  expect(r.warnings[0]).toMatch(/missing source/);
 });
 
 test('clamps focus marker x/y/width/height to source frame', () => {
