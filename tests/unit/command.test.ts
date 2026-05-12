@@ -394,3 +394,117 @@ test('standard buildClipFfmpegArgs is byte-identical for a fixture clip (regress
     '/out.mp4',
   ]);
 });
+
+// --- backing-track audio chain -----------------------------------------------
+
+test('backing track + mute source: only the mp3 plays, fades out at end', () => {
+  const clip: Clip = {
+    ...baseClip,
+    backingTrack: { path: '/music.mp3', volume: 0.6, muteSource: true },
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  // Two inputs: source video and mp3 (no anullsrc when backing track present).
+  expect(args.filter(a => a === '-i')).toEqual(['-i', '-i']);
+  expect(args).toContain('/music.mp3');
+  expect(args).not.toContain('anullsrc=cl=stereo:r=48000');
+  // Audio chain references the mp3 input (1:a), volume-scales, length-clamps
+  // to the clip's 10s output duration, then fades out in the last 0.5s.
+  const fcIdx = args.indexOf('-filter_complex');
+  const fc = args[fcIdx + 1]!;
+  expect(fc).toContain('[1:a]volume=0.6');
+  expect(fc).toContain('atrim=duration=10');
+  expect(fc).toContain('afade=t=out:st=9.5:d=0.5');
+  expect(fc).toContain('[aout]');
+  // Map the synthesised audio, not 0:a.
+  const audioMapIdx = args.indexOf('[aout]');
+  expect(audioMapIdx).toBeGreaterThanOrEqual(0);
+  expect(args).not.toContain('0:a?');
+});
+
+test('backing track + keep source at 1x: source mixed with mp3 then faded', () => {
+  const clip: Clip = {
+    ...baseClip,
+    backingTrack: { path: '/music.mp3', volume: 0.4, muteSource: false },
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIdx = args.indexOf('-filter_complex');
+  const fc = args[fcIdx + 1]!;
+  expect(fc).toContain('[1:a]volume=0.4[bg]');
+  // amix mixes source [0:a] with the gain-scaled bg; duration=first stops the
+  // mix at the source's end (= clip duration); normalize=0 so volume slider
+  // behaves as an actual gain control.
+  expect(fc).toContain('[0:a][bg]amix=inputs=2:duration=first:normalize=0[mix]');
+  expect(fc).toContain('atrim=duration=10');
+  expect(fc).toContain('afade=t=out:st=9.5:d=0.5');
+});
+
+test('backing track at slow-mo: source is dropped regardless of muteSource flag', () => {
+  // At speed != 1 the existing pipeline silences source audio. Backing track
+  // takes that slot — the user's "keep source" flag has nothing to keep.
+  const clip: Clip = {
+    ...baseClip,
+    speed: 0.5,
+    backingTrack: { path: '/music.mp3', volume: 0.8, muteSource: false },
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIdx = args.indexOf('-filter_complex');
+  const fc = args[fcIdx + 1]!;
+  // Output duration doubles from 10s to 20s at 0.5× speed.
+  expect(fc).toContain('atrim=duration=20');
+  expect(fc).toContain('afade=t=out:st=19.5:d=0.5');
+  // No amix path — backing track plays alone.
+  expect(fc).not.toContain('amix=');
+  // No silent anullsrc — backing track replaces it as the audio source.
+  expect(args).not.toContain('anullsrc=cl=stereo:r=48000');
+});
+
+test('clip brightness inserts eq=brightness=N before setpts, after watermark', () => {
+  const clip: Clip = { ...baseClip, brightness: 0.3 };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIdx = args.indexOf('-filter_complex');
+  const filter = args[fcIdx + 1]!;
+  // Order matters: watermark, then eq (so brightness affects the burned-in
+  // watermark too — consistent with what the on-screen preview shows), then
+  // setpts at the very end.
+  expect(filter).toMatch(/borderw=2:bordercolor=black@0\.7,eq=brightness=0\.3,setpts=PTS-STARTPTS\[v\]$/);
+});
+
+test('clip brightness omits the eq filter at the default value (regression guard)', () => {
+  // brightness=0 should produce the exact same args as no brightness key
+  // at all — otherwise existing exports would silently re-encode through
+  // a different filter chain.
+  const noBrightness = buildClipFfmpegArgs(baseClip, source, '/out.mp4');
+  const zeroBrightness = buildClipFfmpegArgs({ ...baseClip, brightness: 0 }, source, '/out.mp4');
+  expect(zeroBrightness).toEqual(noBrightness);
+  // And tiny rounding noise stays a no-op.
+  const epsilonBrightness = buildClipFfmpegArgs({ ...baseClip, brightness: 0.0001 }, source, '/out.mp4');
+  expect(epsilonBrightness).toEqual(noBrightness);
+});
+
+test('forceSilentAudio swaps the source audio for anullsrc at speed=1', () => {
+  // Sequence export with a sequence-wide backing track uses this flag to make
+  // each clip part silent before the concat-stage track is mixed over the
+  // whole reel. Without the flag, clip parts at speed=1 keep source audio.
+  const args = buildClipFfmpegArgs(baseClip, source, '/out.mp4', { forceSilentAudio: true });
+  expect(args).toContain('anullsrc=cl=stereo:r=48000');
+  expect(args).toContain('-shortest');
+  expect(args).toContain('1:a');
+  // Sanity: without the flag we still map source audio.
+  const normal = buildClipFfmpegArgs(baseClip, source, '/out.mp4');
+  expect(normal).toContain('0:a?');
+});
+
+test('backing track on a very short clip clamps the fade-out to half its duration', () => {
+  // 0.5s clip: a 0.5s fade-out would erase the whole thing. The builder clamps
+  // to dur/2 so the fade never exceeds half the clip.
+  const clip: Clip = {
+    ...baseClip,
+    in: 0, out: 0.5,
+    backingTrack: { path: '/music.mp3', volume: 1, muteSource: true },
+  };
+  const args = buildClipFfmpegArgs(clip, source, '/out.mp4');
+  const fcIdx = args.indexOf('-filter_complex');
+  const fc = args[fcIdx + 1]!;
+  expect(fc).toContain('atrim=duration=0.5');
+  expect(fc).toContain('afade=t=out:st=0.25:d=0.25');
+});

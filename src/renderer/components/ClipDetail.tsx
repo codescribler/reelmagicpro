@@ -17,6 +17,7 @@ export function ClipDetail({ onExport }: {
   const viewSource = useProjectStore(s => s.viewSource);
   const updateClip = useProjectStore(s => s.updateClip);
   const appendToSequence = useProjectStore(s => s.appendToSequence);
+  const replayClip = useProjectStore(s => s.replayClip);
   const clipCreatedToken = useProjectStore(s => s.clipCreatedToken);
   const exportBtnRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLTextAreaElement>(null);
@@ -73,7 +74,12 @@ export function ClipDetail({ onExport }: {
             Clip is invalid (in / out outside source duration).
           </div>
         )}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        <div className="clip-controls">
+          <button
+            onClick={replayClip}
+            title="Rewind to the start of this clip and play it back">
+            ↻ Replay clip
+          </button>
           <button
             ref={exportBtnRef}
             className="export-primary"
@@ -87,6 +93,7 @@ export function ClipDetail({ onExport }: {
             title="Append this clip to the end of the sequence so it can be stitched with others into one reel">
             + Add to sequence
           </button>
+          <span className="clip-controls-spacer" />
           <button onClick={() => { const newId = dup(clip.id); if (newId) select(newId); }}>Duplicate</button>
           <button onClick={() => del(clip.id)}>Delete</button>
         </div>

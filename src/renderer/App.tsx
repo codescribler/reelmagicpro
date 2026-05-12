@@ -180,6 +180,8 @@ function Editor({ pastDue }: { pastDue: boolean }) {
     const r = await window.reelmagic.exportSequence({
       runId, clips: project.clips, sequence: project.sequence,
       source: project.sourceVideo, outputPath: out.path,
+      sequenceBackingTrack: project.sequenceBackingTrack,
+      sequenceBrightness: project.sequenceBrightness,
     });
     setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
   }

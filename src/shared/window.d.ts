@@ -25,6 +25,7 @@ declare global {
       checkPath: (p: string) => Promise<{ exists: boolean }>;
       chooseExportPath: (suggestedName: string) => Promise<{ ok: boolean; path?: string }>;
       chooseOutroFile: () => Promise<{ ok: boolean; path?: string }>;
+      chooseBackingTrack: () => Promise<{ ok: boolean; path?: string }>;
       onExportProgress: (cb: (p: ExportProgress) => void) => () => void;
       downloadVeoVideo: (args: DownloadVeoVideoArgs) => Promise<VeoDownloadResult>;
       cancelVeoDownload: (runId: string) => Promise<{ ok: boolean }>;

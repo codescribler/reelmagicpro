@@ -30,6 +30,11 @@ const SourceSchema = z.object({
   height: z.number().int().positive(),
   fps: z.number().positive(),
 });
+const BackingTrackSchema = z.object({
+  path: z.string().min(1),
+  volume: z.number().min(0).max(1),
+  muteSource: z.boolean(),
+});
 const ClipSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
@@ -38,6 +43,8 @@ const ClipSchema = z.object({
   speed: z.number(),
   zoom: ZoomRectSchema,
   focusMarkers: z.array(FocusMarkerSchema).default([]),
+  backingTrack: BackingTrackSchema.optional(),
+  brightness: z.number().min(-1).max(1).optional(),
 });
 const SequenceEntrySchema = z.object({ clipId: z.string().min(1) });
 const BookmarkSchema = z.object({
@@ -53,6 +60,8 @@ const ProjectSchema = z.object({
   sequence: z.array(SequenceEntrySchema),
   // Default keeps older project files (saved before bookmarks existed) loadable.
   bookmarks: z.array(BookmarkSchema).default([]),
+  sequenceBackingTrack: BackingTrackSchema.optional(),
+  sequenceBrightness: z.number().min(-1).max(1).optional(),
 });
 
 export interface ParseResult {

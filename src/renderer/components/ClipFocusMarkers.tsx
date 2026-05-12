@@ -64,7 +64,7 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
       {clip.focusMarkers.length === 0 ? (
         <>
           <p className="dim" style={{ fontSize: 12, margin: '0 0 8px 0' }}>
-            Tag your kid in the video below. The tag follows them so the focus box and the Reel framing can stay on them.
+            Tag a player in the video below. The tag follows them so the focus box can stay on them while they move.
           </p>
           <button className="primary" onClick={handleAdd} title="Tag a player and follow them with the mouse">
             + Tag a player

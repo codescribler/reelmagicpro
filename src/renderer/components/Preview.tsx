@@ -5,7 +5,6 @@ import { markerCentreAt } from '../state/markerPosition';
 import { clampPlayhead, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
-import { InstagramCropOverlay } from './InstagramCropOverlay';
 import { TransportBar } from './TransportBar';
 
 export function Preview() {
@@ -13,13 +12,13 @@ export function Preview() {
   const previewMode = useProjectStore(s => s.previewMode);
   const setPreviewMode = useProjectStore(s => s.setPreviewMode);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(1);
   // Re-render at video tick rate so focus markers can appear/disappear at
   // their in/out times. Held in state so the JSX re-runs the visibility
   // filter every tick.
   const [tickTime, setTickTime] = useState(0);
-  const [showReelFrame, setShowReelFrame] = useState(false);
 
   const seqIndex = previewMode.kind === 'sequence' ? previewMode.index : -1;
 
@@ -52,17 +51,48 @@ export function Preview() {
     return () => ro.disconnect();
   }, [project?.sourceVideo.width, project?.sourceVideo.height]);
 
+  // Backing track active in the current preview. Clip mode reads from the
+  // clip; sequence mode reads from the project-level track. Editing modes
+  // (set-zoom / track-marker) leave the audio idle so they don't compete with
+  // the marker-tracking video that plays at 0.5×.
+  const seqBackingTrack = project?.sequenceBackingTrack ?? null;
+  const isSequenceMode = previewMode.kind === 'sequence';
+  const isPlaybackMode = previewMode.kind === 'clip' || isSequenceMode;
+  const activeBackingTrack = isSequenceMode
+    ? seqBackingTrack
+    : (previewMode.kind === 'clip' ? activeClip?.backingTrack ?? null : null);
+  const audioActive = !!activeBackingTrack && isPlaybackMode;
+
+  // Brightness preview. Clip-mode shows the clip's own brightness; sequence
+  // mode stacks the per-clip and sequence brightness so the picture matches
+  // what the export will produce. Source-mode previews the raw footage with
+  // no adjustment, even if some clip has one set.
+  const previewBrightness = (() => {
+    if (!project || !isPlaybackMode || !activeClip) return 0;
+    const clipB = activeClip.brightness ?? 0;
+    const seqB = isSequenceMode ? (project.sequenceBrightness ?? 0) : 0;
+    return clipB + seqB;
+  })();
+  // CSS filter takes a multiplier where 1 = no change. ffmpeg's eq=brightness
+  // adds N to luma in normalised [-1, 1] space — approximated for preview as
+  // 1+N (so +0.3 brightness ≈ filter: brightness(1.3)). Clamp to a sensible
+  // non-negative range so the picture can't go negative.
+  const cssBrightness = Math.max(0, 1 + previewBrightness);
+
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (activeClip) {
-      v.playbackRate = activeClip.speed;
-      v.muted = activeClip.speed !== 1;
-    } else {
-      v.playbackRate = 1;
-      v.muted = false;
+    if (!activeClip) {
+      v.playbackRate = 1; v.muted = false; return;
     }
-  }, [activeClip?.speed, activeClip?.id, seqIndex]);
+    v.playbackRate = activeClip.speed;
+    // Mute the source video audio when (a) we're slow-mo (no usable audio
+    // anyway) or (b) the active backing track is configured to hide source.
+    // Otherwise leave source audible so it sits underneath the music.
+    const slowmoMutes = activeClip.speed !== 1;
+    const bgMutes = !!activeBackingTrack && activeBackingTrack.muteSource;
+    v.muted = slowmoMutes || bgMutes;
+  }, [activeClip?.speed, activeClip?.id, seqIndex, activeBackingTrack?.muteSource, activeBackingTrack?.path]);
 
   // Seek to clip in-point when entering a new clip OR new sequence index (even
   // if it's the same clip id as the previous sequence entry).
@@ -206,6 +236,99 @@ export function Preview() {
     return () => cancelAnimationFrame(raf);
   }, [project?.sourceVideo.path]);
 
+  // Set / clear the backing-track audio element's src and volume in response
+  // to backing-track changes. Separate from the play/pause sync below so the
+  // sync effect doesn't tear down when the user merely drags the volume
+  // slider while a clip is playing.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (audioActive && activeBackingTrack) {
+      const url = `file://${activeBackingTrack.path}`;
+      if (a.src !== url) a.src = url;
+      a.volume = Math.max(0, Math.min(1, activeBackingTrack.volume));
+    } else {
+      a.pause();
+      a.removeAttribute('src');
+      a.load();
+    }
+  }, [audioActive, activeBackingTrack?.path, activeBackingTrack?.volume]);
+
+  // Refs to the latest project / preview-mode / activeClip so the sync effect
+  // below can read current values without having to tear down + rebuild on
+  // every sequence-index change. Critical for sequence playback: re-attaching
+  // listeners between clips would chop the audio at every boundary.
+  const projectRef = useRef(project);
+  const previewModeRef = useRef(previewMode);
+  const activeClipRef = useRef(activeClip);
+  projectRef.current = project;
+  previewModeRef.current = previewMode;
+  activeClipRef.current = activeClip;
+
+  // Mirror the video's play / pause / seek into the backing-track audio.
+  // The audio always plays at 1× wall-clock; the video plays at clip.speed.
+  // For clip mode, audio position = (video.currentTime - clip.in) / speed.
+  // For sequence mode, add the wall-clock-equivalent duration of every
+  // earlier clip so the music spans the whole reel continuously.
+  useEffect(() => {
+    if (!audioActive) return;
+    const v = videoRef.current;
+    const a = audioRef.current;
+    if (!v || !a) return;
+
+    function computeAudioTime(): number {
+      const proj = projectRef.current;
+      const pm = previewModeRef.current;
+      const ac = activeClipRef.current;
+      if (!v || !proj || !ac) return 0;
+      let elapsed = 0;
+      if (pm.kind === 'sequence') {
+        for (let i = 0; i < pm.index; i++) {
+          const entry = proj.sequence[i];
+          if (!entry) continue;
+          const c = proj.clips.find(cl => cl.id === entry.clipId);
+          if (c) elapsed += (c.out - c.in) / c.speed;
+        }
+      }
+      elapsed += Math.max(0, (v.currentTime - ac.in) / ac.speed);
+      return elapsed;
+    }
+    function syncAudioTime() {
+      if (!a) return;
+      const target = computeAudioTime();
+      // Only correct meaningful drift — assigning currentTime every frame
+      // produces audible clicks in Chromium.
+      if (Math.abs(a.currentTime - target) > 0.15) {
+        a.currentTime = target;
+      }
+    }
+    function onPlay() {
+      if (!a) return;
+      syncAudioTime();
+      a.play().catch(() => {});
+    }
+    function onPause() { a?.pause(); }
+    function onSeeked() { syncAudioTime(); }
+
+    v.addEventListener('play', onPlay);
+    v.addEventListener('pause', onPause);
+    v.addEventListener('seeked', onSeeked);
+    // If the video happens to already be playing when audio activates, kick
+    // off audio immediately rather than waiting for the next play event.
+    if (!v.paused) {
+      syncAudioTime();
+      a.play().catch(() => {});
+    } else {
+      syncAudioTime();
+    }
+    return () => {
+      v.removeEventListener('play', onPlay);
+      v.removeEventListener('pause', onPause);
+      v.removeEventListener('seeked', onSeeked);
+      a.pause();
+    };
+  }, [audioActive]);
+
   if (!project) return <span className="dim">Open a video to begin</span>;
 
   const sw = project.sourceVideo.width;
@@ -270,8 +393,13 @@ export function Preview() {
             width: dw, height: dh,
             transformOrigin: '0 0',
             transform: zoomTransform,
+            filter: cssBrightness !== 1 ? `brightness(${cssBrightness})` : undefined,
           }}
         />
+        {/* Backing-track audio. src is set imperatively by the sync effect
+            so React doesn't reload the element every time the clip changes
+            (which would chop sequence-mode music at each boundary). */}
+        <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
         {/* Focus marker overlays — same transform as the video so they stay
             anchored to the source pixels they were placed on, and inherit the
             zoom transform too. */}
@@ -342,28 +470,9 @@ export function Preview() {
             className="play-overlay"
           />
         )}
-        {!suspendZoom && (
-          <button
-            className={`preview-corner-btn${showReelFrame ? ' active' : ''}`}
-            onClick={e => { e.stopPropagation(); setShowReelFrame(v => !v); }}
-            title="Show / hide the 9:16 Instagram crop framing">
-            {showReelFrame ? '◻ Reel' : '▭ Reel'}
-          </button>
-        )}
         {isZoomed && !suspendZoom && (
           <div className="zoom-indicator">
             {zoomFactor.toFixed(1)}× zoom
-          </div>
-        )}
-        {showReelFrame && activeClip && !suspendZoom && (
-          <div style={{
-            position: 'absolute', top: 0, left: 0,
-            width: dw, height: dh,
-            transformOrigin: '0 0',
-            transform: zoomTransform,
-            pointerEvents: 'none',
-          }}>
-            <InstagramCropOverlay clip={activeClip} source={project.sourceVideo} fit={fit} />
           </div>
         )}
         {isSetZoom && previewMode.kind === 'set-zoom' && (

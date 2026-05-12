@@ -135,7 +135,12 @@ body {
   align-items: center;
   padding: 8px 12px;
   gap: 8px;
-  overflow-x: auto;
+  /* Overflow stays VISIBLE so popovers anchored to buttons in this bar
+     (music, advanced) can escape upward without being clipped. The inner
+     chip container handles its own horizontal scroll, so we don't need to
+     clip at this level. Note: setting overflow-x: auto here also forces
+     overflow-y: auto per the CSS spec, which silently clips the popovers. */
+  overflow: visible;
 }
 /* Discovery stripe shown when the user has 1 clip — flags that the sequence
    feature exists without the full 96px commitment. */
@@ -386,8 +391,25 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   transform: translateY(36px);
 }
 
+/* Top control box on the clip-detail panel — Replay / Export / Add-to-
+   sequence on the left, destructive actions (Duplicate / Delete) pushed to
+   the right by the flex spacer. Visually elevated so it reads as "what you
+   do with this clip" rather than part of the editing steps below. */
+.clip-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.clip-controls-spacer { flex: 1; min-width: 0; }
+
 /* Clip-detail panel restructured as a 1 → 2 → 3 narrative (Track / Zoom /
-   Speed). Each section gets a number-prefixed heading; sub-steps marked
+   Slow-mo). Each section gets a number-prefixed heading; sub-steps marked
    "(optional)" so first-timers know they can stop at step 1 and still
    export. */
 .clip-steps { display: flex; flex-direction: column; gap: 14px; }
@@ -396,6 +418,7 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;
+  scroll-margin-top: 8px;
 }
 .clip-steps .step-title {
   margin: 0 0 6px 0;
@@ -404,6 +427,10 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text);
+}
+.clip-steps .step-title .step-num {
+  color: var(--accent);
+  margin-right: 4px;
 }
 .clip-steps .step-optional {
   font-weight: 400;
@@ -417,6 +444,362 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+/* Step progress strip at the top of the clip editor. Mirrors the section
+   order (Track → Zoom → Slow-mo) and ticks each one off when it's "done"
+   (markers present / focus box drawn / speed below 1×). Clicking a chip
+   scrolls the matching section into view, so on a narrow panel the strip
+   doubles as a mini table of contents. The intro line states the order in
+   plain English; the chips reinforce it visually with arrows between them. */
+.step-progress {
+  background: var(--panel);
+  border: 1px solid var(--accent-glow);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.step-progress-intro {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.step-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.step-progress-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.step-progress-item:hover {
+  background: var(--panel-hover);
+  border-color: var(--accent-strong);
+}
+.step-progress-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.step-progress-item.done {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #d8f9b3;
+}
+.step-progress-item.done .step-progress-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: black;
+}
+.step-progress-label {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.step-progress-optional {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.step-progress-item.done .step-progress-optional { color: rgba(216, 249, 179, 0.7); }
+.step-progress-arrow {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 0 2px;
+  user-select: none;
+}
+
+/* Power-user disclosure at the bottom of the clip editor — kept visually
+   subdued (dashed border, no heading number) so it reads as a separate tier
+   from the Track/Zoom/Slow-mo/Sound steps above. The little badge on the
+   toggle button hints at the current adjustment without forcing the user to
+   open the section. */
+.advanced-step {
+  background: transparent;
+  border: 1px dashed var(--border);
+  padding: 8px 12px;
+}
+.advanced-step.is-open { background: var(--panel); border-style: solid; }
+.advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.advanced-toggle:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text);
+}
+.advanced-toggle-caret {
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+  font-size: 10px;
+}
+.advanced-toggle-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--accent-2);
+  color: #d8f9b3;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.advanced-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Sequence-bar "advanced adjustments" gear button. Sits next to the music
+   pill; same popover styling as the music popover (handled by the shared
+   .seq-music-popover class). Active state shows a small percentage badge so
+   the user knows brightness is in play without opening the dropdown. */
+.seq-adv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 13px;
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+.seq-adv-btn.active {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #d8f9b3;
+}
+.seq-adv-badge {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* Sound (backing-track) controls. Shown inside step 4 of the clip editor.
+   The picker chip surfaces the file name and lets the user change/remove it.
+   Volume sits on its own row; mute-source is a clear checkbox so it doesn't
+   read as a fourth slider. */
+.sound-controls { display: flex; flex-direction: column; gap: 8px; }
+.sound-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.sound-file-icon {
+  color: var(--accent);
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+.sound-file-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sound-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.sound-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+.sound-row-label {
+  flex: 0 0 56px;
+  color: var(--muted);
+}
+.sound-row-value {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 36px;
+  text-align: right;
+}
+.sound-toggle { cursor: pointer; }
+.sound-toggle.is-disabled { opacity: 0.6; cursor: default; }
+.sound-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+/* Currently-playing sequence chip. A halo radiates from behind the chip via
+   ::before, and the chip itself lifts and brightens. The halo is twice the
+   chip's footprint (inset: -X) so it spills out underneath neighbouring
+   chips for the "shine behind the playing one" look — like a stage spotlight
+   the chip is standing in. Pointer-events: none on the pseudo so it doesn't
+   eat clicks meant for the chip itself.
+   z-index dance: the chip sits at 1 above its halo (which is at 0) so the
+   colour fill of the chip stays opaque against the halo's brightness, while
+   the halo escapes the chip's box and washes neighbours. */
+@keyframes seq-chip-shine {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+.seq-chip { position: relative; z-index: 1; }
+.seq-chip-playing {
+  z-index: 2;
+  border-color: var(--accent) !important;
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 12px 2px var(--accent-strong),
+    0 4px 14px rgba(0,0,0,0.45);
+  transform: translateY(-1px) !important;
+}
+.seq-chip-playing::before {
+  content: '';
+  position: absolute;
+  inset: -10px -18px;
+  border-radius: 14px;
+  background: radial-gradient(
+    closest-side,
+    var(--accent-strong) 0%,
+    var(--accent-glow) 45%,
+    transparent 75%
+  );
+  z-index: -1;
+  pointer-events: none;
+  animation: seq-chip-shine 1.8s ease-in-out infinite;
+  filter: blur(2px);
+}
+
+/* Sequence length info chip + "playing clip N / M" indicator. Sits between
+   the chip strip and the action buttons so it reads as metadata about the
+   sequence rather than another button. */
+.seq-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.seq-info-playing {
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.seq-info-length { color: var(--muted); }
+
+/* Sequence-bar music control. Pill button that doubles as discovery (when
+   empty, says "+ Music") and as a current-state indicator (when set, shows
+   the file name with active styling). The popover anchors to the button and
+   opens upward because the sequence bar lives at the bottom of the window;
+   bottom: calc(100% + 8px) places it just above the button regardless of how
+   tall the bar grows. */
+.seq-music-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+.seq-music-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+.seq-music-btn.active {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #d8f9b3;
+}
+.seq-music-icon {
+  color: var(--accent);
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+.seq-music-btn.active .seq-music-icon { color: #d8f9b3; }
+.seq-music-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+.seq-music-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--accent-glow);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 50;
+}
+.seq-music-popover-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.seq-music-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.seq-music-actions {
+  display: flex;
+  gap: 6px;
 }
 
 /* Speed preset chips — landmarks on the slider so a parent doesn't need to
@@ -482,6 +865,51 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   font-style: italic;
   color: var(--muted);
   font-weight: 600;
+}
+
+/* Frame-level in/out nudge controls shown next to the selected-clip name in
+   the timeline. Power-user surface — small, dense, and tooltipped rather
+   than spelled out, so it doesn't crowd the first-run reading order. The
+   shift-modifier multiplier is exposed via tooltip on each button. */
+.nudge-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.nudge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.nudge-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 3px;
+  background: var(--panel-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+}
+.nudge-label {
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.nudge-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 56px;
+  text-align: center;
+}
+.nudge-sep {
+  color: var(--border);
 }
 
 /* Timeline primary action row: Start clip / End clip are the headline verbs.

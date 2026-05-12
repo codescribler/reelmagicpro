@@ -115,6 +115,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
           outro: args.outro,
           format: args.format,
           instagramOutroPath: args.instagramOutroPath,
+          sequenceBackingTrack: args.sequenceBackingTrack,
+          sequenceBrightness: args.sequenceBrightness,
           onProgress: sendProgress, signal: ctrl.signal,
         });
       } catch (e: any) {
@@ -133,6 +135,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const r = await dialog.showOpenDialog(win, {
       properties: ['openFile'],
       filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm'] }],
+    });
+    if (r.canceled || !r.filePaths[0]) return { ok: false };
+    return { ok: true, path: r.filePaths[0] };
+  });
+
+  ipcMain.handle('app:chooseBackingTrack', async () => {
+    const win = getWindow();
+    if (!win) return { ok: false };
+    const r = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      filters: [{ name: 'Audio', extensions: ['mp3', 'm4a', 'wav', 'aac', 'ogg'] }],
     });
     if (r.canceled || !r.filePaths[0]) return { ok: false };
     return { ok: true, path: r.filePaths[0] };

@@ -2,6 +2,15 @@ import { spawn } from 'child_process';
 import ffprobeStatic from 'ffprobe-static';
 import type { SourceMeta } from '../../shared/types';
 
+// Packaged Electron builds resolve ffprobe-static to a path inside app.asar,
+// but the binary lives under app.asar.unpacked (see asarUnpack in
+// electron-builder.yml). In dev the path has no app.asar segment so the
+// replace is a no-op.
+const ffprobePath = ffprobeStatic.path.replace(
+  /app\.asar([\\/]node_modules)/,
+  'app.asar.unpacked$1',
+);
+
 export async function probeVideo(filePath: string): Promise<SourceMeta> {
   const args = [
     '-v', 'error',
@@ -10,7 +19,7 @@ export async function probeVideo(filePath: string): Promise<SourceMeta> {
     '-of', 'json',
     filePath,
   ];
-  const out = await runProbe(ffprobeStatic.path, args);
+  const out = await runProbe(ffprobePath, args);
   const data = JSON.parse(out);
   const stream = data.streams?.[0];
   if (!stream) throw new Error('No video stream found');
@@ -38,7 +47,7 @@ export async function probeHasAudio(filePath: string): Promise<boolean> {
     '-of', 'json',
     filePath,
   ];
-  const out = await runProbe(ffprobeStatic.path, args);
+  const out = await runProbe(ffprobePath, args);
   try {
     const data = JSON.parse(out);
     return Array.isArray(data?.streams) && data.streams.length > 0;

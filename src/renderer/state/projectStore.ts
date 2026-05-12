@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, Clip, SourceMeta, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress } from '../../shared/types';
+import type { Project, Clip, SourceMeta, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack } from '../../shared/types';
 
 export type PreviewMode =
   | { kind: 'idle' }
@@ -44,6 +44,16 @@ interface State {
   reorderSequence: (from: number, to: number) => void;
   removeFromSequence: (index: number) => void;
   clearSequence: () => void;
+  setSequenceBackingTrack: (track: BackingTrack | undefined) => void;
+  setSequenceBrightness: (value: number | undefined) => void;
+
+  // Fine-grained adjustment of a clip's in or out point. Deltas come in as
+  // seconds; the action clamps against source bounds, the opposite endpoint
+  // (with a minimum clip length so the clip can't collapse), and pulls any
+  // focus markers inward so they stay within the new clip range. After
+  // moving the boundary the preview seeks to it and pauses, so the user
+  // sees the exact frame they just landed on.
+  nudgeClipBoundary: (clipId: string, which: 'in' | 'out', deltaSec: number) => void;
 
   addFocusMarker: (clipId: string, marker: FocusMarker) => void;
   updateFocusMarker: (clipId: string, markerId: string, patch: Partial<FocusMarker>) => void;
@@ -206,6 +216,68 @@ export const useProjectStore = create<State>((set, get) => ({
       project: { ...state.project, sequence: [] },
       previewMode: nextPreviewMode,
       dirty: true,
+    };
+  }),
+  setSequenceBackingTrack: (track) => set(state => {
+    if (!state.project) return state;
+    const project = { ...state.project };
+    if (track) project.sequenceBackingTrack = track;
+    else delete project.sequenceBackingTrack;
+    return { project, dirty: true };
+  }),
+  setSequenceBrightness: (value) => set(state => {
+    if (!state.project) return state;
+    const project = { ...state.project };
+    // Strip the field when set back to 0 / undefined so the saved project
+    // file stays minimal — same pattern as togglePrimaryMarker.
+    if (value === undefined || Math.abs(value) < 0.001) {
+      delete project.sequenceBrightness;
+    } else {
+      project.sequenceBrightness = value;
+    }
+    return { project, dirty: true };
+  }),
+
+  nudgeClipBoundary: (clipId, which, deltaSec) => set(state => {
+    if (!state.project) return state;
+    const clip = state.project.clips.find(c => c.id === clipId);
+    if (!clip) return state;
+    const dur = state.project.sourceVideo.duration;
+    const MIN_LEN = 0.05;
+    let newIn = clip.in;
+    let newOut = clip.out;
+    if (which === 'in') {
+      newIn = Math.max(0, Math.min(clip.out - MIN_LEN, clip.in + deltaSec));
+      if (newIn === clip.in) return state;
+    } else {
+      newOut = Math.max(clip.in + MIN_LEN, Math.min(dur, clip.out + deltaSec));
+      if (newOut === clip.out) return state;
+    }
+    // Pull markers back inside the (possibly tightened) clip range. If a
+    // marker's window collapses completely, fall back to the full clip
+    // range so it stays valid rather than vanishing silently.
+    const focusMarkers = clip.focusMarkers.map(m => {
+      let mIn = m.in;
+      let mOut = m.out;
+      if (mIn < newIn) mIn = newIn;
+      if (mOut > newOut) mOut = newOut;
+      if (mIn >= mOut) { mIn = newIn; mOut = newOut; }
+      return { ...m, in: mIn, out: mOut };
+    });
+    const seekTime = which === 'in' ? newIn : newOut;
+    return {
+      project: {
+        ...state.project,
+        clips: state.project.clips.map(c =>
+          c.id === clipId ? { ...c, in: newIn, out: newOut, focusMarkers } : c
+        ),
+      },
+      dirty: true,
+      // Seek + pause so the user sees the exact frame at the new boundary
+      // without leaving clip mode (don't go through requestSeek — that one
+      // deselects the clip).
+      seekRequest: { time: seekTime, token: (state.seekRequest?.token ?? 0) + 1 },
+      pauseRequest: { token: (state.pauseRequest?.token ?? 0) + 1 },
     };
   }),
 

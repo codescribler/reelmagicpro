@@ -1,12 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { previewClock } from '../state/previewClock';
-import type { Project } from '../../shared/types';
+import type { Project, Clip } from '../../shared/types';
+
+// 10-frame "big nudge" multiplier when the user shift-clicks. At 30fps this
+// works out to a third of a second — enough to skip over a couple of frames
+// of breathing room around a moment, but small enough that two or three taps
+// don't blow past the action.
+const BIG_NUDGE_FRAMES = 10;
 
 function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
   const sec = (s % 60).toFixed(1);
   return `${m}:${sec.padStart(4, '0')}`;
+}
+
+// Two-decimal version used next to the nudge controls — frame-level changes
+// at 30fps shift the second decimal, which 0:01.2 would round away.
+function fmtTimePrecise(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = (s % 60).toFixed(2);
+  return `${m}:${sec.padStart(5, '0')}`;
 }
 
 function newId(): string {
@@ -232,9 +246,7 @@ export function Timeline() {
         ) : selectedClip ? (
           <>
             <span><strong>{selectedClip.name}</strong></span>
-            <span className="dim">
-              in {fmtTime(selectedClip.in)} &nbsp;·&nbsp; out {fmtTime(selectedClip.out)} &nbsp;·&nbsp; length {fmtTime(selectedClip.out - selectedClip.in)}
-            </span>
+            <NudgeRow clip={selectedClip} fps={project.sourceVideo.fps} />
           </>
         ) : (
           <span className="dim">Press <kbd>[</kbd> to start a clip, then <kbd>]</kbd> to end it. Or drag on the timeline below.</span>
@@ -297,5 +309,60 @@ export function Timeline() {
         <span className="dim">{fmtTime(dur)}</span>
       </div>
     </div>
+  );
+}
+
+// Precise in/out display + nudge buttons. Shown when a clip is selected so a
+// power user can fine-tune the boundaries without re-marking. One-frame nudge
+// on a normal click; ten-frame nudge with Shift held — discoverable via the
+// tooltip rather than a separate set of buttons that would clutter the row.
+//
+// `fps` is the source video's framerate; we convert frame counts to seconds
+// here so the store stays in seconds throughout.
+function NudgeRow({ clip, fps }: { clip: Clip; fps: number }) {
+  const nudge = useProjectStore(s => s.nudgeClipBoundary);
+  const frame = 1 / Math.max(1, fps);
+
+  function nudgeBy(which: 'in' | 'out', direction: -1 | 1, big: boolean) {
+    const frames = big ? BIG_NUDGE_FRAMES : 1;
+    nudge(clip.id, which, direction * frames * frame);
+  }
+
+  function bigTip(label: string): string {
+    return `${label} (Shift+click: ${BIG_NUDGE_FRAMES} frames)`;
+  }
+
+  const length = clip.out - clip.in;
+
+  return (
+    <span className="nudge-row">
+      <span className="nudge-group" title="Fine-tune the clip's start frame">
+        <button
+          className="nudge-btn"
+          onClick={e => nudgeBy('in', -1, e.shiftKey)}
+          title={bigTip('Nudge in back 1 frame')}>‹</button>
+        <span className="nudge-label">in</span>
+        <span className="nudge-time">{fmtTimePrecise(clip.in)}</span>
+        <button
+          className="nudge-btn"
+          onClick={e => nudgeBy('in', 1, e.shiftKey)}
+          title={bigTip('Nudge in forward 1 frame')}>›</button>
+      </span>
+      <span className="nudge-sep">·</span>
+      <span className="nudge-group" title="Fine-tune the clip's end frame">
+        <button
+          className="nudge-btn"
+          onClick={e => nudgeBy('out', -1, e.shiftKey)}
+          title={bigTip('Nudge out back 1 frame')}>‹</button>
+        <span className="nudge-label">out</span>
+        <span className="nudge-time">{fmtTimePrecise(clip.out)}</span>
+        <button
+          className="nudge-btn"
+          onClick={e => nudgeBy('out', 1, e.shiftKey)}
+          title={bigTip('Nudge out forward 1 frame')}>›</button>
+      </span>
+      <span className="nudge-sep">·</span>
+      <span className="dim">length {fmtTimePrecise(length)}</span>
+    </span>
   );
 }

@@ -68,3 +68,115 @@ test('filter concat: per-input scale+setsar normalisation feeds the concat node'
 test('filter concat: rejects empty input list', () => {
   expect(() => buildFilterConcatFfmpegArgs([], '/out/x.mp4', source)).toThrow();
 });
+
+test('filter concat with sequence backing track + muteSource: parts video only, bg alone', () => {
+  // Two clip parts totalling 10s. Backing track muted source — concat the
+  // video only, ignore the parts' audio entirely, play the music at the
+  // chosen volume, trim to 10s, fade out in the last 0.5s.
+  const args = buildFilterConcatFfmpegArgs(
+    ['C:/tmp/part-0.mp4', 'C:/tmp/part-1.mp4'],
+    '/out/final.mp4',
+    source,
+    {
+      backingTrack: { path: '/music.mp3', volume: 0.7, muteSource: true },
+      totalDurationSec: 10,
+    },
+  );
+  // 3 inputs: 2 parts + 1 backing track.
+  expect(args.filter(a => a === '-i')).toHaveLength(3);
+  expect(args).toContain('/music.mp3');
+  const fcIdx = args.indexOf('-filter_complex');
+  expect(args[fcIdx + 1]).toBe(
+    '[0:v]scale=1920:1080,setsar=1[v0n];'
+    + '[1:v]scale=1920:1080,setsar=1[v1n];'
+    + '[v0n][v1n]concat=n=2:v=1:a=0[v];'
+    + '[2:a]volume=0.7,atrim=duration=10,asetpts=PTS-STARTPTS,afade=t=out:st=9.5:d=0.5[aout]'
+  );
+  expect(args).toContain('[aout]');
+  // No raw [a] map — sequence track takes over the audio stream.
+  expect(args.indexOf('[a]')).toBe(-1);
+});
+
+test('filter concat with sequence backing track + keepSource: parts audio mixed with bg', () => {
+  // Two clip parts totalling 8s. Backing track keeps source — concat parts'
+  // audio, mix bg over the top, trim + fade.
+  const args = buildFilterConcatFfmpegArgs(
+    ['C:/tmp/part-0.mp4', 'C:/tmp/part-1.mp4'],
+    '/out/final.mp4',
+    source,
+    {
+      backingTrack: { path: '/music.mp3', volume: 0.5, muteSource: false },
+      totalDurationSec: 8,
+    },
+  );
+  const fcIdx = args.indexOf('-filter_complex');
+  expect(args[fcIdx + 1]).toBe(
+    '[0:v]scale=1920:1080,setsar=1[v0n];'
+    + '[1:v]scale=1920:1080,setsar=1[v1n];'
+    + '[v0n][0:a][v1n][1:a]concat=n=2:v=1:a=1[v][srcA];'
+    + '[2:a]volume=0.5[bg];'
+    + '[srcA][bg]amix=inputs=2:duration=first:normalize=0[mix];'
+    + '[mix]anull,atrim=duration=8,asetpts=PTS-STARTPTS,afade=t=out:st=7.5:d=0.5[aout]'
+  );
+});
+
+test('filter concat with sequence brightness only: eq tail appended after concat', () => {
+  // No backing track, just a brightness offset. The concat node's [v] is
+  // renamed to [vc] and an eq stage produces the final [v].
+  const args = buildFilterConcatFfmpegArgs(
+    ['C:/tmp/part-0.mp4', 'C:/tmp/part-1.mp4'],
+    '/out/final.mp4',
+    source,
+    { brightness: -0.2 },
+  );
+  const fcIdx = args.indexOf('-filter_complex');
+  expect(args[fcIdx + 1]).toBe(
+    '[0:v]scale=1920:1080,setsar=1[v0n];'
+    + '[1:v]scale=1920:1080,setsar=1[v1n];'
+    + '[v0n][0:a][v1n][1:a]concat=n=2:v=1:a=1[vc][a]'
+    + ';[vc]eq=brightness=-0.2[v]'
+  );
+  // Audio stream still mapped from the concat's [a].
+  expect(args.indexOf('[a]')).toBeGreaterThan(0);
+});
+
+test('filter concat with both backing track and sequence brightness: bg path + eq tail', () => {
+  const args = buildFilterConcatFfmpegArgs(
+    ['C:/tmp/part-0.mp4', 'C:/tmp/part-1.mp4'],
+    '/out/final.mp4',
+    source,
+    {
+      backingTrack: { path: '/music.mp3', volume: 0.5, muteSource: true },
+      totalDurationSec: 8,
+      brightness: 0.15,
+    },
+  );
+  const fcIdx = args.indexOf('-filter_complex');
+  // muteSource path emits concat=...a=0[v] originally; the brightness pass
+  // renames that to [vc] and adds the eq stage at the end.
+  expect(args[fcIdx + 1]).toBe(
+    '[0:v]scale=1920:1080,setsar=1[v0n];'
+    + '[1:v]scale=1920:1080,setsar=1[v1n];'
+    + '[v0n][v1n]concat=n=2:v=1:a=0[vc];'
+    + '[2:a]volume=0.5,atrim=duration=8,asetpts=PTS-STARTPTS,afade=t=out:st=7.5:d=0.5[aout]'
+    + ';[vc]eq=brightness=0.15[v]'
+  );
+});
+
+test('filter concat without sequence backing track is byte-identical to the legacy path', () => {
+  // Regression guard: opts={} should produce the exact same filter as the
+  // no-opts call — otherwise existing sequence exports would silently
+  // re-encode through a different chain.
+  const a = buildFilterConcatFfmpegArgs(
+    ['C:/tmp/part-0.mp4', 'C:/tmp/part-1.mp4'],
+    '/out/final.mp4',
+    source,
+  );
+  const b = buildFilterConcatFfmpegArgs(
+    ['C:/tmp/part-0.mp4', 'C:/tmp/part-1.mp4'],
+    '/out/final.mp4',
+    source,
+    {},
+  );
+  expect(b).toEqual(a);
+});

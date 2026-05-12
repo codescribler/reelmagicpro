@@ -9,6 +9,7 @@ import {
 import { probeVideo, probeHasAudio } from './probe';
 import type {
   Clip, SourceMeta, ExportProgress, ExportResult, SequenceEntry, OutroSpec, ExportFormat,
+  BackingTrack,
 } from '../../shared/types';
 import { computeInstagramFraming } from '../../shared/instagramFraming';
 import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
@@ -17,18 +18,29 @@ import os from 'os';
 import path from 'path';
 
 // Build the clip-render ffmpeg args for the chosen format. Branches at the
-// arg-builder level so the standard pipeline stays byte-identical.
+// arg-builder level so the standard pipeline stays byte-identical. When
+// `forceSilentAudio` is set, each clip part is rendered with no audio
+// (anullsrc); the sequence-with-backing-track flow uses this so the
+// concatenated audio is silent before the sequence track is mixed in.
 function buildArgsForClip(
   clip: Clip,
   source: SourceMeta,
   outputPath: string,
   format: ExportFormat,
+  opts?: { forceSilentAudio?: boolean },
 ): string[] {
   if (format === 'instagram') {
     const framing = computeInstagramFraming(clip, source);
-    return buildInstagramClipFfmpegArgs(clip, source, framing.samples, outputPath);
+    return buildInstagramClipFfmpegArgs(clip, source, framing.samples, outputPath, opts);
   }
-  return buildClipFfmpegArgs(clip, source, outputPath);
+  return buildClipFfmpegArgs(clip, source, outputPath, opts);
+}
+
+// Wall-clock duration of a clip in the rendered output (seconds). Mirrors
+// the formula in command.ts so the concat-stage fade lands at the same beat
+// as each part's own pipeline.
+function clipOutputDurationSec(clip: Clip): number {
+  return (clip.out - clip.in) / clip.speed;
 }
 
 // Synthetic "source" for the concat step so the IG output canvas is sized
@@ -290,11 +302,12 @@ async function renderClipPart(opts: {
   itemIndex: number;
   totalItems: number;
   format: ExportFormat;
+  forceSilentAudio?: boolean;
   onProgress?: ProgressCb;
   signal?: AbortSignal;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { runId, clip, source, outputPath, tempDir, scriptName, itemIndex, totalItems, format, onProgress, signal } = opts;
-  const rawArgs = buildArgsForClip(clip, source, outputPath, format);
+  const { runId, clip, source, outputPath, tempDir, scriptName, itemIndex, totalItems, format, forceSilentAudio, onProgress, signal } = opts;
+  const rawArgs = buildArgsForClip(clip, source, outputPath, format, { forceSilentAudio });
   const { args, cleanup } = await spillLongFilter(rawArgs, tempDir, scriptName);
   try {
     const r = await runFfmpeg({
@@ -328,13 +341,26 @@ async function concatToOutput(opts: {
   // from a different source (i.e. an outro is appended) — the demuxer's
   // stream-copy desyncs at the boundary, and demuxer+reencode stalls there.
   filterConcat?: boolean;
+  // Sequence-wide backing track applied at concat time. Forces filter-concat
+  // (the demuxer can't mix in an extra audio input), takes over the audio
+  // stream from the parts, and fades the final output down to zero.
+  sequenceBackingTrack?: BackingTrack;
+  // Sequence-wide brightness offset. Same forced-filter-concat rule as the
+  // backing track — demuxer concat can't run an eq filter.
+  sequenceBrightness?: number;
   onProgress?: ProgressCb;
   signal?: AbortSignal;
 }): Promise<{ ok: true } | ExportResult> {
-  const { partPaths, outputPath, tempDir, runId, totalDurationMs, itemIndex, totalItems, source, filterConcat, onProgress, signal } = opts;
+  const { partPaths, outputPath, tempDir, runId, totalDurationMs, itemIndex, totalItems, source, filterConcat, sequenceBackingTrack, sequenceBrightness, onProgress, signal } = opts;
   let concatArgs: string[];
-  if (filterConcat) {
-    concatArgs = buildFilterConcatFfmpegArgs(partPaths, outputPath, source);
+  const hasSeqBrightness = sequenceBrightness !== undefined && Math.abs(sequenceBrightness) >= 0.001;
+  const useFilter = filterConcat || !!sequenceBackingTrack || hasSeqBrightness;
+  if (useFilter) {
+    concatArgs = buildFilterConcatFfmpegArgs(partPaths, outputPath, source, {
+      backingTrack: sequenceBackingTrack,
+      totalDurationSec: sequenceBackingTrack ? totalDurationMs / 1000 : undefined,
+      brightness: hasSeqBrightness ? sequenceBrightness : undefined,
+    });
   } else {
     const listPath = path.join(tempDir, 'list.txt');
     await fs.writeFile(listPath, buildConcatListContents(partPaths), 'utf8');
@@ -367,11 +393,21 @@ export async function exportSequence(opts: {
   outro?: OutroSpec;
   format?: ExportFormat;
   instagramOutroPath?: string;
+  sequenceBackingTrack?: BackingTrack;
+  sequenceBrightness?: number;
   onProgress?: ProgressCb;
   signal?: AbortSignal;
 }): Promise<ExportResult> {
-  const { runId, clips, sequence, source, outputPath, outro, instagramOutroPath, onProgress, signal } = opts;
+  const { runId, clips, sequence, source, outputPath, outro, instagramOutroPath, sequenceBackingTrack, sequenceBrightness, onProgress, signal } = opts;
   const format: ExportFormat = opts.format ?? 'standard';
+
+  // Sequence-level music overrides per-clip music. When present, each clip
+  // part is rendered as if `clip.backingTrack` were unset, and (if
+  // muteSource) its source audio is silenced too. The single backing track
+  // then mixes over the entire concatenated output, with a fade at the very
+  // end.
+  const stripPerClipAudio = !!sequenceBackingTrack;
+  const forceSilent = !!sequenceBackingTrack && sequenceBackingTrack.muteSource;
 
   if (sequence.length === 0) {
     return { ok: false, error: 'Sequence is empty' };
@@ -411,12 +447,19 @@ export async function exportSequence(opts: {
     for (let i = 0; i < items.length; i++) {
       if (signal?.aborted) return { ok: false, error: 'Cancelled' };
       const { clip } = items[i]!;
+      // When a sequence track is set, drop the clip's own backing-track config
+      // before rendering — otherwise the clip part would carry its own music
+      // and try to fade out, fighting the sequence-wide track.
+      const renderClip: Clip = stripPerClipAudio
+        ? { ...clip, backingTrack: undefined }
+        : clip;
       const partPath = path.join(tempDir, `part-${i}.mp4`);
       partPaths.push(partPath);
       const r = await renderClipPart({
-        runId, clip, source, outputPath: partPath,
+        runId, clip: renderClip, source, outputPath: partPath,
         tempDir, scriptName: `fc-part-${i}.txt`,
         itemIndex: i + 1, totalItems, format,
+        forceSilentAudio: forceSilent,
         onProgress, signal,
       });
       if (!r.ok) {
@@ -429,9 +472,12 @@ export async function exportSequence(opts: {
       if (signal?.aborted) return { ok: false, error: 'Cancelled' };
       const outroPartPath = path.join(tempDir, 'outro.mp4');
       partPaths.push(outroPartPath);
+      // Outro renders silent when the sequence track wants source audio
+      // hidden — the sequence track plays through the outro too.
       const r = await renderOutroPart({
         outro: outroSpec.spec, source, outputPath: outroPartPath,
-        durationMs: outroSpec.durationMs, hasAudio: outroSpec.hasAudio,
+        durationMs: outroSpec.durationMs,
+        hasAudio: forceSilent ? false : outroSpec.hasAudio,
         format,
         signal,
         onProgress: (percent) => onProgress?.({
@@ -456,7 +502,10 @@ export async function exportSequence(opts: {
       totalDurationMs: totalConcatMs,
       itemIndex: totalItems, totalItems,
       source: concatSourceForFormat(source, format),
-      filterConcat: !!outroSpec || format === 'instagram',
+      filterConcat: !!outroSpec || format === 'instagram' || !!sequenceBackingTrack
+        || (sequenceBrightness !== undefined && Math.abs(sequenceBrightness) >= 0.001),
+      sequenceBackingTrack,
+      sequenceBrightness,
       onProgress, signal,
     });
     if (!concatRes.ok) return concatRes;

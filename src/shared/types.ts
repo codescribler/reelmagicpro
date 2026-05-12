@@ -43,6 +43,17 @@ export interface FocusMarker {
   primary?: boolean;
 }
 
+// Optional music track that plays over the exported clip. Volume is 0–1
+// (≈ amplitude multiplier — 1 means the mp3's own level). muteSource hides
+// the source video's own audio so the mp3 plays alone; below 1× speed the
+// source is silenced regardless. The export always fades the final audio
+// down to zero in its last fraction of a second.
+export interface BackingTrack {
+  path: string;
+  volume: number;
+  muteSource: boolean;
+}
+
 export interface Clip {
   id: string;
   name: string;
@@ -51,6 +62,11 @@ export interface Clip {
   speed: number;
   zoom: ZoomRect;
   focusMarkers: FocusMarker[];
+  backingTrack?: BackingTrack;
+  // Per-clip luma offset. -0.5 = very dark, 0 = no change, +0.5 = very bright.
+  // Stacks with Project.sequenceBrightness during sequence export. Optional
+  // and undefined = no adjustment so old projects load unchanged.
+  brightness?: number;
 }
 
 export interface SequenceEntry {
@@ -70,6 +86,15 @@ export interface Project {
   clips: Clip[];
   sequence: SequenceEntry[];
   bookmarks: Bookmark[];
+  // Sequence-wide backing track. Overrides every clip's own backing track when
+  // exporting/previewing the sequence — the user picks one song for the whole
+  // reel instead of per-segment music that would cut and restart at each clip
+  // boundary. The export fades it down to zero at the very end.
+  sequenceBackingTrack?: BackingTrack;
+  // Sequence-wide brightness adjustment, applied on top of any per-clip
+  // brightness during sequence export and preview. Same -0.5..+0.5 range
+  // as Clip.brightness.
+  sequenceBrightness?: number;
 }
 
 export type ExportPhase = 'rendering-part' | 'concatenating' | 'done' | 'error';
@@ -129,6 +154,8 @@ export interface ExportSequenceArgs {
   outro?: OutroSpec;
   format?: ExportFormat;
   instagramOutroPath?: string;
+  sequenceBackingTrack?: BackingTrack;
+  sequenceBrightness?: number;
 }
 
 // "Paste a Veo link" flow: app fetches the page, scrapes the video URL,

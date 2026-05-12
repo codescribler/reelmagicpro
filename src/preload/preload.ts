@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('reelmagic', {
     ipcRenderer.invoke('app:chooseExportPath', suggestedName),
   chooseOutroFile: (): Promise<{ ok: boolean; path?: string }> =>
     ipcRenderer.invoke('app:chooseOutroFile'),
+  chooseBackingTrack: (): Promise<{ ok: boolean; path?: string }> =>
+    ipcRenderer.invoke('app:chooseBackingTrack'),
   onExportProgress: (cb: (p: ExportProgress) => void) => {
     const handler = (_: unknown, p: ExportProgress) => cb(p);
     ipcRenderer.on('app:exportProgress', handler);

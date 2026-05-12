@@ -1,9 +1,87 @@
-import type { Clip, SourceMeta, FocusMarker } from '../../shared/types';
+import type { Clip, SourceMeta, FocusMarker, BackingTrack } from '../../shared/types';
 import type { IgFramingSample } from '../../shared/instagramFraming';
 import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
 
 function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : String(parseFloat(n.toFixed(6)));
+}
+
+// Length of the export-end audio fade-out, in seconds. "Very quickly" per the
+// product brief; long enough that a hard cut isn't audible, short enough that
+// nothing the user cares about gets faded away. Clamped per-clip so we never
+// fade more than half of a very short clip.
+const AUDIO_FADE_OUT_SEC = 0.5;
+
+// Below this magnitude we omit the eq filter entirely so the rest of the
+// pipeline stays byte-identical for clips/sequences with brightness left at
+// the default. Catches both undefined and rounding noise like 0.00001.
+const BRIGHTNESS_EPSILON = 0.001;
+
+// ffmpeg's `eq=brightness=N` adds N (clamped −1.0..1.0) to the normalised
+// luma. Applied at the tail of the video filter chain so any markers /
+// watermark drawn earlier brighten or darken with the picture — matching
+// what a parent expects from a "brightness" control (the whole frame
+// changes, not just the source pixels).
+function brightnessFilter(brightness: number | undefined): string {
+  if (!brightness || Math.abs(brightness) < BRIGHTNESS_EPSILON) return '';
+  return `,eq=brightness=${fmt(brightness)}`;
+}
+
+// Output (playback) duration of a clip in seconds. Source segment is
+// (out - in) seconds; slow-mo at 0.5× doubles that. The audio chain has to
+// match this number so fadeouts and atrims land on the same beat as the
+// rendered video.
+function clipOutputDurationSec(clip: Clip): number {
+  return (clip.out - clip.in) / clip.speed;
+}
+
+// Build the audio half of the filter_complex when the clip has a backing
+// track. Returns the filter snippet ending in [aout], the input args for the
+// mp3 file, and the audio map flag.
+//
+// Source audio behaviour:
+//   - speed === 1 AND keepSource → mix source [0:a] with the backing track.
+//   - speed !== 1 OR muteSource  → source is silent / hidden; backing track
+//                                  plays alone. (Slow-mo already silences
+//                                  source elsewhere in the pipeline, so this
+//                                  path matches the existing convention.)
+//
+// The backing track is volume-scaled, length-clamped to the clip's output
+// duration, and faded out at the very end. amix uses normalize=0 so the user's
+// volume slider behaves like an actual gain control — without it, ffmpeg
+// would silently halve both inputs.
+function buildBackingAudio(clip: Clip, bgInputIndex: number): {
+  inputs: string[];
+  filter: string;
+  audioMap: string;
+} {
+  const bg = clip.backingTrack!;
+  const dur = clipOutputDurationSec(clip);
+  const fade = Math.min(AUDIO_FADE_OUT_SEC, Math.max(0, dur / 2));
+  const fadeStart = Math.max(0, dur - fade);
+  const trimTail = `,atrim=duration=${fmt(dur)},asetpts=PTS-STARTPTS`;
+  const fadeTail = fade > 0
+    ? `,afade=t=out:st=${fmt(fadeStart)}:d=${fmt(fade)}`
+    : '';
+
+  const keepSource = !bg.muteSource && clip.speed === 1;
+  let filter: string;
+  if (keepSource) {
+    // Source audio (untrimmed; -ss/-to already restricted it) mixed with the
+    // gain-scaled backing track. duration=first stops the mix when source
+    // ends, so a longer mp3 gets cut at the clip boundary.
+    filter = `[${bgInputIndex}:a]volume=${fmt(bg.volume)}[bg];`
+      + `[0:a][bg]amix=inputs=2:duration=first:normalize=0[mix];`
+      + `[mix]anull${trimTail}${fadeTail}[aout]`;
+  } else {
+    filter = `[${bgInputIndex}:a]volume=${fmt(bg.volume)}${trimTail}${fadeTail}[aout]`;
+  }
+
+  return {
+    inputs: ['-i', bg.path],
+    filter,
+    audioMap: '[aout]',
+  };
 }
 
 // Build a piecewise-linear ffmpeg expression for a value v(t) sampled at
@@ -374,6 +452,7 @@ export function buildClipFfmpegArgs(
   clip: Clip,
   source: SourceMeta,
   outputPath: string,
+  opts?: { forceSilentAudio?: boolean },
 ): string[] {
   const { x, y, width, height } = clip.zoom;
   // Use PTS-STARTPTS so the output's first frame has timestamp 0 regardless of
@@ -385,14 +464,34 @@ export function buildClipFfmpegArgs(
   // Watermark is placed AFTER markers so it sits on top of any focus marker
   // that happens to overlap the top-left corner — branding stays visible.
   const watermark = watermarkFilter(source);
-  const filter = `[0:v]crop=${fmt(width)}:${fmt(height)}:${fmt(x)}:${fmt(y)},scale=${source.width}:${source.height}${markerFilters ? ',' + markerFilters : ''},${watermark},setpts=${setpts}[v]`;
+  const videoFilter = `[0:v]crop=${fmt(width)}:${fmt(height)}:${fmt(x)}:${fmt(y)},scale=${source.width}:${source.height}${markerFilters ? ',' + markerFilters : ''},${watermark}${brightnessFilter(clip.brightness)},setpts=${setpts}[v]`;
 
   const head = ['-y', '-ss', fmt(clip.in), '-to', fmt(clip.out), '-i', source.path];
-  const audioInput = clip.speed === 1 ? [] : ['-f', 'lavfi', '-i', 'anullsrc=cl=stereo:r=48000'];
+  const hasBacking = !!clip.backingTrack && clip.backingTrack.path.length > 0;
+  // Backing-track input goes after the source video so its filter graph can
+  // reference it as [1:a]. The legacy anullsrc for slow-mo only applies when
+  // there's no backing track — otherwise the backing track IS the audio.
+  // `forceSilentAudio` (used by the sequence-with-backing-track pipeline)
+  // promotes the speed!=1 anullsrc path to apply at speed=1 too, so each
+  // clip part contributes silent audio to the concat — the sequence-level
+  // track then mixes over the whole thing.
+  const backing = hasBacking ? buildBackingAudio(clip, 1) : null;
+  const needSilent = !backing && (opts?.forceSilentAudio || clip.speed !== 1);
+  const audioInput = backing
+    ? backing.inputs
+    : (needSilent ? ['-f', 'lavfi', '-i', 'anullsrc=cl=stereo:r=48000'] : []);
+
+  const filter = backing ? `${videoFilter};${backing.filter}` : videoFilter;
   const fc = ['-filter_complex', filter];
-  const map = clip.speed === 1
-    ? ['-map', '[v]', '-map', '0:a?']
-    : ['-map', '[v]', '-map', '1:a', '-shortest'];
+
+  let map: string[];
+  if (backing) {
+    map = ['-map', '[v]', '-map', backing.audioMap, '-shortest'];
+  } else if (needSilent) {
+    map = ['-map', '[v]', '-map', '1:a', '-shortest'];
+  } else {
+    map = ['-map', '[v]', '-map', '0:a?'];
+  }
   const enc = [
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
     '-pix_fmt', 'yuv420p',
@@ -420,6 +519,7 @@ export function buildInstagramClipFfmpegArgs(
   source: SourceMeta,
   framingSamples: IgFramingSample[],
   outputPath: string,
+  opts?: { forceSilentAudio?: boolean },
 ): string[] {
   const z = clip.zoom;
   const sx = source.width / z.width;
@@ -437,20 +537,34 @@ export function buildInstagramClipFfmpegArgs(
   const markerFilters = buildMarkerFilters(clip, source);
   const igWatermark = instagramWatermarkFilter(INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT);
 
-  const filter = `[0:v]crop=${fmt(z.width)}:${fmt(z.height)}:${fmt(z.x)}:${fmt(z.y)}`
+  const videoFilter = `[0:v]crop=${fmt(z.width)}:${fmt(z.height)}:${fmt(z.x)}:${fmt(z.y)}`
     + `,scale=${source.width}:${source.height}`
     + (markerFilters ? `,${markerFilters}` : '')
     + `,crop=w='${wExpr}':h='${hExpr}':x='${xExpr}':y='${yExpr}'`
     + `,scale=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}`
     + `,${igWatermark}`
+    + brightnessFilter(clip.brightness)
     + `,setpts=${setpts}[v]`;
 
   const head = ['-y', '-ss', fmt(clip.in), '-to', fmt(clip.out), '-i', source.path];
-  const audioInput = clip.speed === 1 ? [] : ['-f', 'lavfi', '-i', 'anullsrc=cl=stereo:r=48000'];
+  const hasBacking = !!clip.backingTrack && clip.backingTrack.path.length > 0;
+  const backing = hasBacking ? buildBackingAudio(clip, 1) : null;
+  const needSilent = !backing && (opts?.forceSilentAudio || clip.speed !== 1);
+  const audioInput = backing
+    ? backing.inputs
+    : (needSilent ? ['-f', 'lavfi', '-i', 'anullsrc=cl=stereo:r=48000'] : []);
+
+  const filter = backing ? `${videoFilter};${backing.filter}` : videoFilter;
   const fc = ['-filter_complex', filter];
-  const map = clip.speed === 1
-    ? ['-map', '[v]', '-map', '0:a?']
-    : ['-map', '[v]', '-map', '1:a', '-shortest'];
+
+  let map: string[];
+  if (backing) {
+    map = ['-map', '[v]', '-map', backing.audioMap, '-shortest'];
+  } else if (needSilent) {
+    map = ['-map', '[v]', '-map', '1:a', '-shortest'];
+  } else {
+    map = ['-map', '[v]', '-map', '0:a?'];
+  }
   const enc = [
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
     '-pix_fmt', 'yuv420p',
