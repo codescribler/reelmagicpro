@@ -21,7 +21,16 @@ export async function loadProjectInteractive(): Promise<void> {
     alert(`Source not found at:\n${r.project.sourceVideo.path}\n\nPick the file to relink.`);
     const picked = await window.reelmagic.openSourceVideo();
     if (picked.source) {
-      relinked = { ...r.project, sourceVideo: picked.source };
+      // Patch BOTH the legacy sourceVideo mirror and the canonical sources[0]
+      // entry. Keeping just one in sync would leave the in-memory project in
+      // an inconsistent state — the renderer reads from both.
+      const newPrimary = picked.source;
+      const oldPrimary = r.project.sources[0]!;
+      const nextSources = [
+        { ...oldPrimary, ...newPrimary }, // keep id (and any rename) but swap path/dims/duration/fps
+        ...r.project.sources.slice(1),
+      ];
+      relinked = { ...r.project, sourceVideo: newPrimary, sources: nextSources };
       didRelink = true;
     }
   }

@@ -2,6 +2,7 @@ import React from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { SequenceMusicButton } from './SequenceMusicButton';
 import { SequenceAdvancedButton } from './SequenceAdvancedButton';
+import { sourceColour } from '../lib/sourceColors';
 import type { Project } from '../../shared/types';
 
 function fmtTime(s: number): string {
@@ -70,6 +71,8 @@ export function Sequence({ onExportSequence }: {
           const clip = project.clips.find(c => c.id === entry.clipId);
           const isInvalid = !clip || invalid.has(entry.clipId);
           const isPlaying = i === playingIndex;
+          const multiSource = project.sources.length > 1;
+          const stripeColour = clip ? sourceColour(project, clip.sourceId) : 'var(--border)';
           return (
             <div key={i}
               draggable
@@ -94,6 +97,7 @@ export function Sequence({ onExportSequence }: {
                 padding: '6px 6px 6px 10px',
                 background: isInvalid ? 'var(--danger)' : 'var(--accent-2)',
                 border: isInvalid ? '1px solid var(--border)' : '1px solid var(--accent)',
+                borderLeft: multiSource && !isInvalid ? `4px solid ${stripeColour}` : undefined,
                 borderRadius: 5,
                 cursor: isInvalid ? 'default' : 'grab',
                 whiteSpace: 'nowrap',

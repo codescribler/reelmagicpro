@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import type { Clip, FocusMarker } from '../../shared/types';
+import { resolveSourceForClip } from '../../shared/resolveSource';
 
 const MARKER_COLORS = ['yellow', 'red', 'lime', 'cyan', 'magenta', 'orange', 'white'];
 
@@ -40,8 +41,13 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
 
   function handleAdd() {
     if (!project) return;
-    const sw = project.sourceVideo.width;
-    const sh = project.sourceVideo.height;
+    // Marker coordinates live in the CLIP's source pixel space — for clips
+    // from a non-primary source, project.sourceVideo would be the wrong
+    // canvas. resolveSourceForClip falls back to the primary for legacy
+    // single-source clips that lack a sourceId.
+    const clipSource = resolveSourceForClip(project, clip) ?? project.sourceVideo;
+    const sw = clipSource.width;
+    const sh = clipSource.height;
     const w = Math.round(sw * 0.15);
     const h = Math.round(sh * 0.25);
     const m: FocusMarker = {

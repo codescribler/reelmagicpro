@@ -6,11 +6,14 @@ import { clampPlayhead, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
 import { TransportBar } from './TransportBar';
+import { resolveSource, resolveSourceForClip } from '../../shared/resolveSource';
 
 export function Preview() {
   const project = useProjectStore(s => s.project);
   const previewMode = useProjectStore(s => s.previewMode);
   const setPreviewMode = useProjectStore(s => s.setPreviewMode);
+  const activeSourceId = useProjectStore(s => s.activeSourceId);
+  const setActiveSourceId = useProjectStore(s => s.setActiveSourceId);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -37,19 +40,28 @@ export function Preview() {
     return null;
   })();
 
+  // Resolve the source actually loaded into the <video> element. Falls back
+  // to the project primary for legacy single-source projects that never
+  // populated activeSourceId yet (e.g. immediately after load, before the
+  // store's setProject runs). Used for fit / clamp / dimension reads
+  // throughout the rest of this component.
+  const previewSource = resolveSource(project ?? { sources: [] }, activeSourceId ?? undefined)
+    ?? project?.sourceVideo
+    ?? null;
+
   useLayoutEffect(() => {
-    if (!containerRef.current || !project) return;
+    if (!containerRef.current || !previewSource) return;
     const c = containerRef.current;
     const update = () => {
-      const sx = c.clientWidth / project.sourceVideo.width;
-      const sy = c.clientHeight / project.sourceVideo.height;
+      const sx = c.clientWidth / previewSource.width;
+      const sy = c.clientHeight / previewSource.height;
       setFit(Math.max(0.0001, Math.min(sx, sy, 1)));
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(c);
     return () => ro.disconnect();
-  }, [project?.sourceVideo.width, project?.sourceVideo.height]);
+  }, [previewSource?.width, previewSource?.height]);
 
   // Backing track active in the current preview. Clip mode reads from the
   // clip; sequence mode reads from the project-level track. Editing modes
@@ -94,16 +106,43 @@ export function Preview() {
     v.muted = slowmoMutes || bgMutes;
   }, [activeClip?.speed, activeClip?.id, seqIndex, activeBackingTrack?.muteSource, activeBackingTrack?.path]);
 
-  // Seek to clip in-point when entering a new clip OR new sequence index (even
-  // if it's the same clip id as the previous sequence entry).
+  // Seek to clip in-point when entering a new clip OR new sequence index
+  // (even if it's the same clip id as the previous sequence entry).
+  //
+  // Multi-source twist: if the new clip belongs to a different source from
+  // the one currently loaded into the <video> element, swap the active
+  // source first (preserving previewMode so a sequence keeps playing across
+  // the boundary). That swap re-renders with a new src; the effect re-fires
+  // and we then wait for `loadedmetadata` before seeking, because setting
+  // currentTime on a video that's still loading is a no-op in Chromium.
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !activeClip) return;
-    v.currentTime = activeClip.in;
-    if (previewMode.kind === 'sequence') {
-      v.play().catch(() => {});
+    if (!v || !activeClip || !project) return;
+
+    const clipSource = resolveSourceForClip(project, activeClip);
+    if (clipSource && clipSource.id !== activeSourceId) {
+      setActiveSourceId(clipSource.id, { preservePreview: true });
+      return; // The next effect run will see the matched source and seek.
     }
-  }, [activeClip?.id, previewMode.kind, seqIndex]);
+
+    let cancelled = false;
+    const apply = () => {
+      if (cancelled || !v || !activeClip) return;
+      v.currentTime = activeClip.in;
+      if (previewMode.kind === 'sequence') {
+        v.play().catch(() => {});
+      }
+    };
+    if (v.readyState >= 1) {
+      apply();
+    } else {
+      v.addEventListener('loadedmetadata', apply, { once: true });
+    }
+    return () => {
+      cancelled = true;
+      v.removeEventListener('loadedmetadata', apply);
+    };
+  }, [activeClip?.id, previewMode.kind, seqIndex, activeSourceId, project, setActiveSourceId]);
 
   // Replay: rewind to clip.in and play. Triggered by the Replay button in the
   // clip editor incrementing replayToken.
@@ -123,8 +162,8 @@ export function Preview() {
   useEffect(() => {
     if (!seekRequest) return;
     const v = videoRef.current;
-    if (!v || !project) return;
-    v.currentTime = Math.max(0, Math.min(project.sourceVideo.duration, seekRequest.time));
+    if (!v || !previewSource) return;
+    v.currentTime = Math.max(0, Math.min(previewSource.duration, seekRequest.time));
   }, [seekRequest?.token]);
 
   // Relative skip nudges. Single mechanism shared with the clip editor's
@@ -136,10 +175,10 @@ export function Preview() {
   useEffect(() => {
     if (!skipRequest) return;
     const v = videoRef.current;
-    if (!v || !project) return;
-    const target = snapToFrame(v.currentTime + skipRequest.delta, project.sourceVideo.fps);
+    if (!v || !previewSource) return;
+    const target = snapToFrame(v.currentTime + skipRequest.delta, previewSource.fps);
     const lo = activeClip ? activeClip.in : 0;
-    const hi = activeClip ? activeClip.out : project.sourceVideo.duration;
+    const hi = activeClip ? activeClip.out : previewSource.duration;
     v.currentTime = clampPlayhead(target, lo, hi);
   }, [skipRequest?.token]);
 
@@ -329,10 +368,10 @@ export function Preview() {
     };
   }, [audioActive]);
 
-  if (!project) return <span className="dim">Open a video to begin</span>;
+  if (!project || !previewSource) return <span className="dim">Open a video to begin</span>;
 
-  const sw = project.sourceVideo.width;
-  const sh = project.sourceVideo.height;
+  const sw = previewSource.width;
+  const sh = previewSource.height;
   const dw = sw * fit;
   const dh = sh * fit;
 
@@ -387,7 +426,7 @@ export function Preview() {
       }}>
         <video
           ref={videoRef}
-          src={`file://${project.sourceVideo.path}`}
+          src={`file://${previewSource.path}`}
           style={{
             position: 'absolute', top: 0, left: 0,
             width: dw, height: dh,

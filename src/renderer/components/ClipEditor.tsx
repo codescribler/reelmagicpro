@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { ClipFocusMarkers } from './ClipFocusMarkers';
 import type { Clip, BackingTrack } from '../../shared/types';
+import { resolveSourceForClip } from '../../shared/resolveSource';
 
 // Slow-mo landmarks only. Faster-than-1× is gone because the editor's job is
 // to slow a moment down so a parent can watch their kid do the thing — there's
@@ -27,8 +28,12 @@ export function ClipEditor({ clipId }: { clipId: string }) {
   const clip = project?.clips.find(c => c.id === clipId);
   if (!project || !clip) return null;
 
-  const sw = project.sourceVideo.width;
-  const sh = project.sourceVideo.height;
+  // Read dimensions from the clip's OWN source — a clip cut from match 2
+  // lives in match 2's pixel grid, not the project's primary. Falls back to
+  // the primary for legacy single-source clips with no sourceId.
+  const clipSource = resolveSourceForClip(project, clip) ?? project.sourceVideo;
+  const sw = clipSource.width;
+  const sh = clipSource.height;
   const isFullFrame = clip.zoom.x === 0 && clip.zoom.y === 0 && clip.zoom.width === sw && clip.zoom.height === sh;
 
   // What counts as "done" for each step. Track is the foundation — zoom and

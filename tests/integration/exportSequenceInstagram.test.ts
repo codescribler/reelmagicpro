@@ -33,7 +33,7 @@ test('exportSequence in instagram format concatenates a tracked clip and an untr
       },
     ],
     sequence: [{ clipId: 'c1' }, { clipId: 'c2' }],
-    source,
+    sources: [{ id: 'src_a', ...source }],
     outputPath: out,
     format: 'instagram',
   });

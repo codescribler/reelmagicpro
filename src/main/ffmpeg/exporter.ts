@@ -8,9 +8,10 @@ import {
 } from './concatList';
 import { probeVideo, probeHasAudio } from './probe';
 import type {
-  Clip, SourceMeta, ExportProgress, ExportResult, SequenceEntry, OutroSpec, ExportFormat,
+  Clip, SourceMeta, SourceVideo, ExportProgress, ExportResult, SequenceEntry, OutroSpec, ExportFormat,
   BackingTrack,
 } from '../../shared/types';
+import { resolveSource } from '../../shared/resolveSource';
 import { computeInstagramFraming } from '../../shared/instagramFraming';
 import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
 import fs from 'fs/promises';
@@ -388,7 +389,11 @@ export async function exportSequence(opts: {
   runId: string;
   clips: Clip[];
   sequence: SequenceEntry[];
-  source: SourceMeta;
+  // Canonical sources array. sources[0] is the project primary — used for
+  // outro padding and the concat output canvas. Each clip is rendered
+  // against ITS OWN source (resolved by clip.sourceId, falling back to the
+  // primary), so a sequence can mix clips from different matches.
+  sources: SourceVideo[];
   outputPath: string;
   outro?: OutroSpec;
   format?: ExportFormat;
@@ -398,8 +403,17 @@ export async function exportSequence(opts: {
   onProgress?: ProgressCb;
   signal?: AbortSignal;
 }): Promise<ExportResult> {
-  const { runId, clips, sequence, source, outputPath, outro, instagramOutroPath, sequenceBackingTrack, sequenceBrightness, onProgress, signal } = opts;
+  const { runId, clips, sequence, sources, outputPath, outro, instagramOutroPath, sequenceBackingTrack, sequenceBrightness, onProgress, signal } = opts;
   const format: ExportFormat = opts.format ?? 'standard';
+
+  if (!sources || sources.length === 0) {
+    return { ok: false, error: 'No sources provided' };
+  }
+  // sources[0] is the project primary. Outro padding, concat canvas, and the
+  // legacy single-source code paths that still reference a SourceMeta read
+  // from this. Per-clip rendering further down resolves each clip's own
+  // source via clip.sourceId.
+  const source: SourceMeta = sources[0]!;
 
   // Sequence-level music overrides per-clip music. When present, each clip
   // part is rendered as if `clip.backingTrack` were unset, and (if
@@ -453,10 +467,15 @@ export async function exportSequence(opts: {
       const renderClip: Clip = stripPerClipAudio
         ? { ...clip, backingTrack: undefined }
         : clip;
+      // Resolve THIS clip's source. Unknown sourceId falls back to the
+      // primary (sources[0]) — same rule as the renderer's resolveSource.
+      // The clip-arg builder uses this for crop dimensions, marker scaling,
+      // and (importantly) the -i input path that ffmpeg actually reads.
+      const clipSource = resolveSource({ sources }, clip.sourceId) ?? source;
       const partPath = path.join(tempDir, `part-${i}.mp4`);
       partPaths.push(partPath);
       const r = await renderClipPart({
-        runId, clip: renderClip, source, outputPath: partPath,
+        runId, clip: renderClip, source: clipSource, outputPath: partPath,
         tempDir, scriptName: `fc-part-${i}.txt`,
         itemIndex: i + 1, totalItems, format,
         forceSilentAudio: forceSilent,
@@ -497,13 +516,25 @@ export async function exportSequence(opts: {
       items.reduce((acc, it) => acc + clipDurationMs(it.clip), 0)
       + (outroSpec?.durationMs ?? 0);
 
+    // Force filter-concat whenever clip parts won't be byte-uniform — the
+    // demuxer concat stream-copies and rejects mixed dimensions / SARs /
+    // codecs. Multi-source sequences inherently produce parts of different
+    // dimensions because each clip is rendered against its own source's
+    // pixel grid; filter-concat normalises them all back to the primary
+    // canvas at concat time.
+    const primaryId = sources[0]!.id;
+    const anyClipFromOtherSource = items.some(it =>
+      (it.clip.sourceId ?? primaryId) !== primaryId
+    );
+
     const concatRes = await concatToOutput({
       partPaths, outputPath, tempDir, runId,
       totalDurationMs: totalConcatMs,
       itemIndex: totalItems, totalItems,
       source: concatSourceForFormat(source, format),
       filterConcat: !!outroSpec || format === 'instagram' || !!sequenceBackingTrack
-        || (sequenceBrightness !== undefined && Math.abs(sequenceBrightness) >= 0.001),
+        || (sequenceBrightness !== undefined && Math.abs(sequenceBrightness) >= 0.001)
+        || anyClipFromOtherSource,
       sequenceBackingTrack,
       sequenceBrightness,
       onProgress, signal,

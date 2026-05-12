@@ -17,6 +17,7 @@ function fmtTime(s: number): string {
 export function TransportBar({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement> }) {
   const project = useProjectStore(s => s.project);
   const previewMode = useProjectStore(s => s.previewMode);
+  const activeSourceId = useProjectStore(s => s.activeSourceId);
   const requestSkip = useProjectStore(s => s.requestSkip);
   const skipSeconds = useSettings(s => s.skipSeconds);
 
@@ -67,8 +68,16 @@ export function TransportBar({ videoRef }: { videoRef: React.RefObject<HTMLVideo
     return null;
   })();
 
+  // For source-mode scrubbing, the scrubber's range is the ACTIVE source's
+  // duration, not the project primary's — multi-source projects let the
+  // scrubber follow whichever source is currently loaded.
+  const activeSourceDuration = (
+    project.sources.find(s => s.id === activeSourceId)
+    ?? project.sources[0]
+    ?? project.sourceVideo
+  ).duration;
   const rangeStart = activeClip ? activeClip.in : 0;
-  const rangeEnd = activeClip ? activeClip.out : project.sourceVideo.duration;
+  const rangeEnd = activeClip ? activeClip.out : activeSourceDuration;
   const rangeDuration = Math.max(0.0001, rangeEnd - rangeStart);
   const localTime = Math.max(0, Math.min(rangeDuration, tickTime - rangeStart));
   const pct = (localTime / rangeDuration) * 100;

@@ -111,7 +111,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       try {
         return await exportSequence({
           runId: args.runId, clips: args.clips, sequence: args.sequence,
-          source: args.source, outputPath: args.outputPath,
+          sources: args.sources, outputPath: args.outputPath,
           outro: args.outro,
           format: args.format,
           instagramOutroPath: args.instagramOutroPath,

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { useSettings } from '../state/settings';
 import { previewClock } from '../state/previewClock';
+import { sourceColour } from '../lib/sourceColors';
 
 function fmt(s: number): string {
   const m = Math.floor(s / 60);
@@ -21,18 +22,24 @@ function findClosestId(list: { id: string; time: number }[], t: number): string 
 
 export function BookmarkList() {
   const project = useProjectStore(s => s.project);
+  const activeSourceId = useProjectStore(s => s.activeSourceId);
   const addBookmark = useProjectStore(s => s.addBookmark);
   const updateBookmark = useProjectStore(s => s.updateBookmark);
   const deleteBookmark = useProjectStore(s => s.deleteBookmark);
   const requestSeek = useProjectStore(s => s.requestSeek);
   const rewindSeconds = useSettings(s => s.bookmarkRewindSeconds);
 
-  // Sort by time so the list reads chronologically regardless of the order
-  // bookmarks were added.
-  const sorted = useMemo(
-    () => project ? [...project.bookmarks].sort((a, b) => a.time - b.time || a.createdAt - b.createdAt) : [],
-    [project?.bookmarks],
-  );
+  // Sort by time AND filter to the active source. Bookmarks reference a
+  // specific source's timeline, so showing another source's bookmarks
+  // beside the active source's timeline would be misleading.
+  const sorted = useMemo(() => {
+    if (!project) return [];
+    const primaryId = project.sources[0]?.id;
+    return [...project.bookmarks]
+      .filter(b => (b.sourceId ?? primaryId) === activeSourceId)
+      .sort((a, b) => a.time - b.time || a.createdAt - b.createdAt);
+  }, [project?.bookmarks, project?.sources, activeSourceId]);
+  const multiSource = (project?.sources.length ?? 0) > 1;
 
   // Held in a ref so the rAF loop reads the latest list without restarting on
   // every bookmark change.
@@ -102,6 +109,7 @@ export function BookmarkList() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {sorted.map(b => {
               const isCurrent = b.id === currentId;
+              const stripeColour = sourceColour(project, b.sourceId);
               return (
                 <div key={b.id}
                   ref={el => {
@@ -109,14 +117,22 @@ export function BookmarkList() {
                     else rowRefs.current.delete(b.id);
                   }}
                   style={{
-                    padding: '6px 8px',
+                    position: 'relative',
+                    padding: '6px 8px 6px 12px',
                     borderRadius: 5,
                     background: isCurrent ? 'var(--accent-2)' : 'var(--panel-2)',
                     border: isCurrent ? '1px solid var(--accent)' : '1px solid var(--border)',
                     display: 'flex', alignItems: 'center', gap: 6,
                     transition: 'background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease',
                     boxShadow: isCurrent ? '0 0 0 1px rgba(109,209,13,0.25)' : 'none',
+                    overflow: 'hidden',
                   }}>
+                  {multiSource && (
+                    <span aria-hidden="true" style={{
+                      position: 'absolute', left: 0, top: 0, bottom: 0,
+                      width: 4, background: stripeColour,
+                    }} />
+                  )}
                   <button
                     onClick={() => onSeek(b.time)}
                     title={`Jump to ${fmt(Math.max(0, b.time - rewindSeconds))} (${rewindSeconds}s before bookmark)`}

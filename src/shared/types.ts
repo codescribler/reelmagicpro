@@ -172,7 +172,15 @@ export interface ExportClipArgs {
   instagramOutroPath?: string;      // optional; preferred over `outro` when format === 'instagram'
 }
 export interface ExportSequenceArgs {
-  runId: string; clips: Clip[]; sequence: SequenceEntry[]; source: SourceMeta; outputPath: string;
+  runId: string;
+  clips: Clip[];
+  sequence: SequenceEntry[];
+  // Canonical sources array — one entry per source video the project knows
+  // about. Per-clip rendering resolves each clip's `sourceId` against this
+  // list. The output canvas (outro padding, concat normalisation) is sized
+  // from sources[0]. For single-source projects this is just one entry.
+  sources: SourceVideo[];
+  outputPath: string;
   outro?: OutroSpec;
   format?: ExportFormat;
   instagramOutroPath?: string;

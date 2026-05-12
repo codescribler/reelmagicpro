@@ -54,7 +54,7 @@ interface State {
   removeSource: (sourceId: string, opts?: { cascade?: boolean }) => { ok: boolean; reason?: string };
   renameSource: (sourceId: string, name: string) => void;
   reorderSources: (from: number, to: number) => void;
-  setActiveSourceId: (sourceId: string) => void;
+  setActiveSourceId: (sourceId: string, opts?: { preservePreview?: boolean }) => void;
   addClip: (clip: Clip) => void;
   updateClip: (id: string, patch: Partial<Clip>) => void;
   deleteClip: (id: string) => void;
@@ -296,14 +296,21 @@ export const useProjectStore = create<State>((set, get) => ({
     };
   }),
 
-  setActiveSourceId: (sourceId) => set(state => {
+  setActiveSourceId: (sourceId, opts) => set(state => {
     if (!state.project) return state;
     if (!state.project.sources.some(s => s.id === sourceId)) return state;
+    if (opts?.preservePreview) {
+      // Used by the cross-source sequence-playback path: swap the active
+      // source so the preview / timeline / clip list move to the new clip's
+      // home, but leave previewMode + selectedClipId alone so the
+      // sequence keeps playing through the boundary.
+      return { activeSourceId: sourceId };
+    }
     return {
       activeSourceId: sourceId,
-      // Switching sources implicitly returns to source-mode playback for
-      // that source. Selected clip is cleared so the editor doesn't keep
-      // showing a clip from a different source.
+      // Switching sources via the UI implicitly returns to source-mode
+      // playback for that source. Selected clip is cleared so the editor
+      // doesn't keep showing a clip from a different source.
       selectedClipId: null,
       previewMode: { kind: 'source' },
     };
@@ -363,7 +370,25 @@ export const useProjectStore = create<State>((set, get) => ({
     });
     return copy.id;
   },
-  selectClip: (id) => set({ selectedClipId: id, previewMode: id ? { kind: 'clip', clipId: id } : { kind: 'source' } }),
+  selectClip: (id) => set(state => {
+    if (id === null) {
+      return { selectedClipId: null, previewMode: { kind: 'source' } };
+    }
+    // Selecting a clip from a different source auto-switches the active
+    // source — otherwise the preview would still be loaded with the wrong
+    // video and the clip's in/out wouldn't make sense.
+    const clip = state.project?.clips.find(c => c.id === id);
+    const primaryId = state.project?.sources[0]?.id;
+    const clipSourceId = clip?.sourceId ?? primaryId;
+    const patch: Partial<State> = {
+      selectedClipId: id,
+      previewMode: { kind: 'clip', clipId: id },
+    };
+    if (clipSourceId && clipSourceId !== state.activeSourceId) {
+      patch.activeSourceId = clipSourceId;
+    }
+    return patch;
+  }),
   viewSource: () => set({ selectedClipId: null, previewMode: { kind: 'source' } }),
   setPreviewMode: (m) => set({ previewMode: m }),
   replayToken: 0,
@@ -521,16 +546,30 @@ export const useProjectStore = create<State>((set, get) => ({
     };
   }),
 
-  addBookmark: (time) => set(state => state.project ? ({
-    project: {
-      ...state.project,
-      bookmarks: [
-        ...state.project.bookmarks,
-        { id: newBookmarkId(), time: Math.max(0, time), createdAt: Date.now() },
-      ],
-    },
-    dirty: true,
-  }) : state),
+  addBookmark: (time) => set(state => {
+    if (!state.project) return state;
+    // Attach the active source's id only when the project has multiple
+    // sources — keeps single-source bookmark files clean and lets old
+    // projects continue to round-trip as v1.
+    const sourceId = state.project.sources.length > 1
+      ? state.activeSourceId ?? undefined
+      : undefined;
+    return {
+      project: {
+        ...state.project,
+        bookmarks: [
+          ...state.project.bookmarks,
+          {
+            id: newBookmarkId(),
+            time: Math.max(0, time),
+            createdAt: Date.now(),
+            ...(sourceId ? { sourceId } : {}),
+          },
+        ],
+      },
+      dirty: true,
+    };
+  }),
   updateBookmark: (id, patch) => set(state => state.project ? ({
     project: {
       ...state.project,

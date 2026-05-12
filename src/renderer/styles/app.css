@@ -662,6 +662,96 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   margin: 0;
 }
 
+/* Source tab strip in the right panel. One tab per source video plus a
+   "+ Add video" trailing button. Each tab carries a vertical colour stripe
+   matching the source's assigned colour so the rest of the UI (clip rows,
+   bookmark rows, sequence chips) reads the same colour for the same
+   source. Hidden affordances on hover: the × remove button and the
+   double-click-to-rename. */
+.source-tabs {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex: 0 0 auto;
+  min-height: 30px;
+}
+.source-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: transparent;
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  user-select: none;
+  position: relative;
+  white-space: nowrap;
+  max-width: 180px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.source-tab:hover { background: var(--panel-hover); color: var(--text); }
+.source-tab.is-active {
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+}
+.source-tab-stripe {
+  display: inline-block;
+  width: 4px;
+  align-self: stretch;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+.source-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+.source-tab-input {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 140px;
+  outline: none;
+}
+.source-tab-remove {
+  margin-left: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.source-tab:hover .source-tab-remove { opacity: 1; }
+.source-tab-remove:hover:not(:disabled) {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+.source-tab-add {
+  align-self: center;
+  margin: 0 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+
 /* Currently-playing sequence chip. A halo radiates from behind the chip via
    ::before, and the chip itself lifts and brightens. The halo is twice the
    chip's footprint (inset: -X) so it spills out underneath neighbouring

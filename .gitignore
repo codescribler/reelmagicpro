@@ -5,5 +5,5 @@ dist-app/
 out/
 *.log
 .DS_Store
-tests/fixtures/test-pattern.mp4
+tests/fixtures/*.mp4
 .claude/

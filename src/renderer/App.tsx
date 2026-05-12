@@ -37,6 +37,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
   const setExportResult = useProjectStore(s => s.setExportResult);
   const clipCreatedToken = useProjectStore(s => s.clipCreatedToken);
   const sequenceAppendToken = useProjectStore(s => s.sequenceAppendToken);
+  const activeSourceId = useProjectStore(s => s.activeSourceId);
   const sideRef = useRef<HTMLDivElement>(null);
   const seqRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -96,10 +97,17 @@ function Editor({ pastDue }: { pastDue: boolean }) {
       }
       // Frame / 1-second nudge via comma and period (with optional shift). The
       // existing modifier check above already rejects Ctrl/Alt/Meta combos, so
-      // keyToNudgeDelta only sees plain or shifted comma/period.
+      // keyToNudgeDelta only sees plain or shifted comma/period. The fps used
+      // is the ACTIVE source's — switching tabs in a multi-source project
+      // updates this without remounting.
+      const activeFps = (
+        st.project.sources.find(src => src.id === st.activeSourceId)
+        ?? st.project.sources[0]
+        ?? st.project.sourceVideo
+      ).fps;
       const nudgeDelta = keyToNudgeDelta(
         { code: e.code, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey },
-        st.project.sourceVideo.fps,
+        activeFps,
       );
       if (nudgeDelta !== null) {
         e.preventDefault();
@@ -152,20 +160,35 @@ function Editor({ pastDue }: { pastDue: boolean }) {
 
   async function handleOpen() {
     const r = await window.reelmagic.openSourceVideo();
-    if (r.source) setSource(r.source);
-    else if (r.error) alert(`Couldn't read this file: ${r.error}`);
+    if (r.source) {
+      // First video → setSource (creates the project). Subsequent picks of
+      // "Open Video" / "+ Add video" → addSource (appends to existing
+      // project's sources array and switches preview to the new one).
+      const cur = useProjectStore.getState().project;
+      if (cur) {
+        useProjectStore.getState().addSource(r.source);
+      } else {
+        setSource(r.source);
+      }
+    } else if (r.error) alert(`Couldn't read this file: ${r.error}`);
   }
 
   async function runClipExport(clipId: string) {
     if (!project) return;
     const clip = project.clips.find(c => c.id === clipId);
     if (!clip) return;
+    // Resolve the clip's own source — for multi-source projects the clip
+    // might come from any of the imported videos. Falls back to the project
+    // primary if sourceId is undefined (legacy single-source clip).
+    const clipSource = project.sources.find(s => s.id === clip.sourceId)
+      ?? project.sources[0]
+      ?? project.sourceVideo;
     const out = await window.reelmagic.chooseExportPath(`${clip.name}.mp4`);
     if (!out.ok || !out.path) return;
     const runId = 'r_' + Math.random().toString(36).slice(2, 10);
     startRun(runId);
     const r = await window.reelmagic.exportClip({
-      runId, clip, source: project.sourceVideo, outputPath: out.path,
+      runId, clip, source: clipSource, outputPath: out.path,
     });
     setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
   }
@@ -179,7 +202,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
     startRun(runId);
     const r = await window.reelmagic.exportSequence({
       runId, clips: project.clips, sequence: project.sequence,
-      source: project.sourceVideo, outputPath: out.path,
+      sources: project.sources, outputPath: out.path,
       sequenceBackingTrack: project.sequenceBackingTrack,
       sequenceBrightness: project.sequenceBrightness,
     });
@@ -221,7 +244,12 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         />
         <MenuActions />
         <button onClick={handleOpen}>Open video…</button>
-        <span className="dim">{project ? project.sourceVideo.path : 'no source'}</span>
+        <span className="dim">{
+          project
+            ? (project.sources.find(s => s.id === activeSourceId)
+                ?? project.sources[0] ?? project.sourceVideo).path
+            : 'no source'
+        }</span>
         {dirty && <span className="dim">●</span>}
         {pastDue && (
           <button
@@ -249,7 +277,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         </div>
       </div>
       <div className="side" ref={sideRef}>
-        <RightPanel onExport={runClipExport} />
+        <RightPanel onExport={runClipExport} onAddVideo={handleOpen} />
       </div>
       {seqMode === 'full' && (
         <div className="seq" ref={seqRef}>

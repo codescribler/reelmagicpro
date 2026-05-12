@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { previewClock } from '../state/previewClock';
 import type { Project, Clip } from '../../shared/types';
+import { resolveSourceForClip } from '../../shared/resolveSource';
 
 // 10-frame "big nudge" multiplier when the user shift-clicks. At 30fps this
 // works out to a third of a second — enough to skip over a couple of frames
@@ -35,10 +36,21 @@ type Selection = { in: number; out: number | null };
 
 function commitClip(proj: Project, inT: number, outT: number) {
   if (outT - inT < 0.05) return;
-  const sw = proj.sourceVideo.width;
-  const sh = proj.sourceVideo.height;
-  const id = newId();
   const st = useProjectStore.getState();
+  // Cut against the ACTIVE source's dimensions — Timeline only ever marks
+  // moments from the source currently in the preview. Falls back to the
+  // primary if the active source went missing (shouldn't happen, but the
+  // resolve helper handles it).
+  const activeSourceId = st.activeSourceId ?? proj.sources[0]?.id;
+  const activeSource = proj.sources.find(s => s.id === activeSourceId) ?? proj.sources[0];
+  if (!activeSource) return;
+  const sw = activeSource.width;
+  const sh = activeSource.height;
+  // Only stamp an explicit sourceId when the project actually has multiple
+  // sources. Single-source projects keep the field undefined so v1 round-
+  // trip serialization stays byte-identical to legacy files.
+  const sourceId = proj.sources.length > 1 ? activeSource.id : undefined;
+  const id = newId();
   st.addClip({
     id,
     // "Untitled clip N" rather than "Clip N" — the word "Untitled" tells
@@ -48,6 +60,7 @@ function commitClip(proj: Project, inT: number, outT: number) {
     in: inT, out: outT, speed: 1,
     zoom: { x: 0, y: 0, width: sw, height: sh },
     focusMarkers: [],
+    ...(sourceId ? { sourceId } : {}),
   });
   // Drill straight into the clip detail view so the user lands on the export
   // buttons instead of having to spot the new row in the list.
@@ -59,6 +72,7 @@ export function Timeline() {
   // every render — React's rules-of-hooks invariant.
   const project = useProjectStore(s => s.project);
   const selectedClipId = useProjectStore(s => s.selectedClipId);
+  const activeSourceId = useProjectStore(s => s.activeSourceId);
   const trackRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState<Selection | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -133,7 +147,14 @@ export function Timeline() {
   }, [isMarking]);
 
   if (!project) return <span className="dim" style={{ padding: 8, display: 'block' }}>Timeline</span>;
-  const dur = project.sourceVideo.duration;
+  // The timeline always represents the ACTIVE source's duration — it's a
+  // single timeline for the source loaded in the preview. Falls back to the
+  // primary if the active id is somehow stale.
+  const activeSource = project.sources.find(s => s.id === activeSourceId) ?? project.sources[0]!;
+  const dur = activeSource.duration;
+  const visibleClips = project.clips.filter(c =>
+    (c.sourceId ?? project.sources[0]!.id) === activeSource.id
+  );
   const selectedClip = selectedClipId ? project.clips.find(c => c.id === selectedClipId) ?? null : null;
 
   function pixelToTime(clientX: number): number {
@@ -246,7 +267,10 @@ export function Timeline() {
         ) : selectedClip ? (
           <>
             <span><strong>{selectedClip.name}</strong></span>
-            <NudgeRow clip={selectedClip} fps={project.sourceVideo.fps} />
+            <NudgeRow
+              clip={selectedClip}
+              fps={(resolveSourceForClip(project, selectedClip) ?? project.sourceVideo).fps}
+            />
           </>
         ) : (
           <span className="dim">Press <kbd>[</kbd> to start a clip, then <kbd>]</kbd> to end it. Or drag on the timeline below.</span>
@@ -275,7 +299,7 @@ export function Timeline() {
         onMouseMove={onTrackHover}
         onMouseLeave={onTrackLeave}
         style={{ position: 'relative', height: 32, background: '#15171b', borderRadius: 4, cursor: 'crosshair' }}>
-        {project.clips.map(c => {
+        {visibleClips.map(c => {
           const l = (c.in / dur) * 100;
           const w = ((c.out - c.in) / dur) * 100;
           const isSel = c.id === selectedClipId;

@@ -19,7 +19,7 @@ test('exports a sequence concatenating two clips', async () => {
     runId: 's1',
     clips,
     sequence: [{ clipId: 'c1' }, { clipId: 'c2' }],
-    source,
+    sources: [{ id: 'src_a', ...source }],
     outputPath: out,
   });
   expect(r.ok).toBe(true);
