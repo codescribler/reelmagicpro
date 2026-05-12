@@ -1,22 +1,23 @@
 # ReelMagic — Buyer Profile
 
-**Date:** 2026-05-01
+**Date:** 2026-05-01 (founder corrections applied 2026-05-12)
 **Status:** Initial draft from founder interview (awaiting written review)
-**Source:** Founder interview — the founder is the target buyer (parent of two boys at Cassiobury Rangers JPL and top-tier Watford FC PDC, U13 → U14 in 2026-27 season)
+**Source:** Founder interview — the founder is the target buyer (parent of two boys, both playing for Cassiobury Rangers in the Junior Premier League *and* Watford's Advanced Player Development Programme (APDC); finishing U13 in the 2025/26 season, heading into U14 for 2026/27)
 
 ## Persona Snapshot
 
 **Archetype:** *"Football Dad with Pathway Boys"*
 
 - Father, ~35-50, embedded in football culture for years
-- Multiple sons inside the football pathway:
-  - Competitive grassroots (e.g., Cassiobury Rangers in the Junior Premier League)
-  - Pre-academy / development programmes (e.g., top tier of Watford FC's PDC)
-- **Age band of relevant boys: U9 to U17.** Founder's own boys are U13 → U14 next season — squarely in the **Youth Development Phase (U12-U16)**, the most scout-active window of the pathway.
+- Multiple sons on the football pathway, each typically combining:
+  - Competitive grassroots / JPL (e.g., Cassiobury Rangers in the Junior Premier League)
+  - Pre-academy player-development programmes (e.g., Watford FC's Advanced Player Development Programme — APDC)
+- **Not in an academy yet** — on the pathway, training and playing at a serious level, with the next steps still to earn. This is the bulk of the market (academy-signed players are the small tail).
+- **Age band of relevant boys: U9 to U17.** Founder's own boys are finishing U13 (2025/26 season), heading into U14 in 2026/27 — squarely in the **Youth Development Phase (U12-U16)**, the most scout-active window of the pathway.
 - Location: UK, weighted toward South East and Midlands where Cat 1/2 academies cluster
 - Tech comfort: moderate — installs DaVinci, manages local files, can download club Veo recordings. Not a videographer, and resents being treated like one.
 - Spending power: routinely £100s/month on training, kit, travel. A £25/year app is rounding error.
-- **Already inside the system** — this is *retention and progression*, not aspirational/hopeful from outside. Different from generic "kid wants to be a footballer" personas.
+- **On the pathway, fighting for the next step** — retention/progression rather than aspirational from outside, but *also* still trying to earn academy interest. Different from generic "kid wants to be a footballer" personas.
 
 **Self-identified one-liner:** *"A dad who wants to quickly cut up a video."*
 
@@ -92,7 +93,7 @@ Features the buyer can rely on today, ordered roughly by importance to the JTBD:
 - **Speed control + frame and second nudges** — slow skill moments down; step the playhead by exactly one frame or one second when marking precise in/out points.
 - **Sequence builder + single-file sequence export** — assemble a reel from multiple clips and export as one mp4.
 - **Brand outro append** — optional outro file appended to every export.
-- **Instagram (9:16 Reels) export with auto-tracking** — the same clip exports as a vertical Reel that auto-follows the marked player the whole way through with smoothed pan and zoom. Live preview canvas inside the export modal so framing is verified before render. Optional separate 9:16 outro file in settings (the standard outro is rescaled if no 9:16 version is provided).
+- ~~**Instagram (9:16 Reels) export with auto-tracking**~~ — *Currently hidden in the shipping UI as of 2026-05-12. Built and functional but not exposed. Do not feature in marketing copy until re-enabled. See `features.md` Section G3.*
 
 ## Wishlist Features (drives next roadmap)
 

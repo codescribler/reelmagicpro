@@ -31,7 +31,7 @@ This is now a **pre-launch landing page**, not a buy-now site. Pricing is undeci
 | **Philosophical Problem** | A dad shouldn't have to become a videographer to advocate for his son |
 | **Villain** | Editing software built for Hollywood, not the sidelines |
 | **Guide — Empathy** | We know what it's like to lose hours to DaVinci and hit a paywall in CapCut |
-| **Guide — Authority** | Built by a football dad with sons in the JPL and top tier of Watford FC's PDC; one workflow, one tool |
+| **Guide — Authority** | Built by a football dad with sons playing JPL (Cassiobury Rangers) *and* Watford's Advanced Player Development Programme (APDC); one workflow, one tool |
 | **Plan** | (1) Drop in the match (2) Bookmark and edit the moments (3) Export a scout-ready reel |
 | **Direct CTA** | Get early access |
 | **Transitional CTA** | *(none — single CTA strategy for pre-launch)* |
@@ -112,13 +112,15 @@ No timelines. No codecs. No audio panels. Just clip, mark, zoom, slow it down, e
 **Lock the frame on your child**
 Drop a marker on your son and follow him across the pitch with the cursor while the video plays slow. The outline animates along his path on the preview *and* the exported reel. When the play is static, the focus box still crops the wide Veo frame tight onto the action — so every kid is pulled out of the wide angle into the centre of the frame. Add a name label so the scout knows whose foot was on the ball. Highlight more than one player in the same clip when the moment calls for it.
 
-**Instagram Reels, automatically framed**
-One click exports the same clip as a 9:16 Reel — the crop follows the marked player the whole way through with smoothed pan and zoom, no jumps. Live preview the framing inside the app before you render, then ship it straight to Instagram.
+{/* Instagram 9:16 export feature card removed 2026-05-12 — the auto-framed
+    vertical export is currently hidden in the shipping UI. When it's
+    re-enabled, restore the card with copy that points at the auto-framing
+    differentiator. See features.md Section G3. */}
 
 **Your footage stays local**
 The match never uploads. Editing happens on your machine. Only an export count travels for licence checks — never the video.
 
-**Design note:** Four benefit cards in a 2×2 grid on desktop, stacked on mobile. One simple icon per benefit. The two marquee features (player tracking, Instagram Reels) deserve slightly bolder treatment — bigger card, "Marquee" pill, or a subtle accent — because they're the ones that defeat the buyer's existing tools.
+**Design note:** Three benefit cards (after the 2026-05-12 removal of the Instagram Reels card), stacked or 1×3 / 2+1. One simple icon per benefit. The marquee feature (player tracking) deserves slightly bolder treatment — bigger card, "Marquee" pill, or a subtle accent — because it's the one that most clearly defeats the buyer's existing tools. Restore the Instagram Reels card to a four-card grid when the 9:16 export is re-exposed.
 
 ---
 
@@ -128,7 +130,7 @@ The match never uploads. Editing happens on your machine. Only an export count t
 
 Whoever made the editor you've been fighting wasn't thinking about you. They were thinking about colour grading, multi-cam syncing, audio mastering. You're thinking about whether the academy scout watched the WhatsApp link.
 
-ReelMagicPro is built by a parent of two academy-pathway boys — Junior Premier League and the top tier of Watford FC's PDC. Every feature in this app exists because it was needed for a real reel that a real scout watched. Nothing made the cut except the effects that matter in the context of showing to a scout.
+ReelMagicPro is built by a parent of two boys on the pathway — both at Cassiobury Rangers JPL and Watford's Advanced Player Development Programme (APDC). They're not in an academy yet; they're where most football kids are, training and playing at a serious level with the next steps still to earn. Every feature in this app exists because it was needed for a real reel a real scout watched. Nothing made the cut except the effects that matter in the context of showing to a scout.
 
 **Philosophical callout (large, bordered or styled apart):**
 
@@ -155,8 +157,8 @@ Open the Veo download (or an iPhone clip). One file. No setup. No project wizard
 **2. Bookmark and edit the moments**
 Scrub through the match once and bookmark every play that matters. Cut clips from the bookmarks. Set in and out, drop the focus box on the action, and — if the player is moving — track him so the frame follows. Slow the skill moments down. Duplicate a clip if you want a second angle.
 
-**3. Export the reel — landscape or Instagram Reel**
-One clip, or the full sequence as a single mp4. Pick standard 16:9 for the scout's inbox or WhatsApp, or pick the Instagram preset and the 9:16 crop is auto-framed around the tracked player. Both at the click of a button.
+**3. Export the reel**
+One clip, or the full sequence as a single mp4 — ready for WhatsApp, email, the scout's inbox, Instagram, wherever the reel needs to go. One click.
 
 **Design note:** Three numbered cards across the desktop view; stacked on mobile. Heading above: *"The Match-to-Reel Workflow."*
 
@@ -208,7 +210,7 @@ Bottom strip: © 2026 ReelMagicPro · Built by a football dad
 3. Every Veo Deserves a Showreel.
 4. Stop Letting His Best Matches Go Unseen.
 5. Drop a Marker. The Frame Follows. *(tracking-led)*
-6. From Veo to Instagram — Auto-Framed. *(Reels-led)*
+6. From Veo to Instagram — Auto-Framed. *(Reels-led — parked until the 9:16 export is re-exposed)*
 7. Track Your Child. Without Becoming a Videographer. *(tracking + positioning)*
 
 ## Direct CTA variants
