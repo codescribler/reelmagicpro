@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { ClipEditor } from './ClipEditor';
+import { ClipNudgeRow } from './ClipNudgeRow';
+import { resolveSourceForClip } from '../../shared/resolveSource';
 
 // Full-panel clip editor. Replaces the clip list when a clip is selected.
 // The Back button clears the selection (and resets the preview to source),
@@ -74,6 +76,10 @@ export function ClipDetail({ onExport }: {
             Clip is invalid (in / out outside source duration).
           </div>
         )}
+        <ClipNudgeRow
+          clip={clip}
+          fps={(resolveSourceForClip(project, clip) ?? project.sourceVideo).fps}
+        />
         <div className="clip-controls">
           <button
             onClick={replayClip}

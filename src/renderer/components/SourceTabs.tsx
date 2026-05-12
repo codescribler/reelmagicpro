@@ -22,6 +22,15 @@ export function SourceTabs({ onAddVideo }: { onAddVideo: () => void }) {
 
   return (
     <div className="source-tabs" role="tablist" aria-label="Source videos">
+      {/* The pill is set apart from the tabs visually — it's an action
+          ("add"), not a tab ("switch to"). Always-visible so the
+          multi-source feature is discoverable even from the empty state. */}
+      <button
+        className="source-tab-add"
+        onClick={onAddVideo}
+        title="Add another video to this project">
+        + Add video
+      </button>
       {project.sources.map((src) => (
         <SourceTab
           key={src.id}
@@ -35,12 +44,6 @@ export function SourceTabs({ onAddVideo }: { onAddVideo: () => void }) {
           onRemove={() => handleRemove(src.id)}
         />
       ))}
-      <button
-        className="source-tab-add"
-        onClick={onAddVideo}
-        title="Add another video to this project">
-        + Add video
-      </button>
     </div>
   );
 
@@ -119,10 +122,13 @@ function SourceTab({
       role="tab"
       aria-selected={active}
       className={`source-tab${active ? ' is-active' : ''}`}
+      // Apply the source's colour as the tab's top-border accent. Active
+      // tabs get a brighter version (CSS) and the colour band is what
+      // visually ties a tab to its clip-row / sequence-chip stripes.
+      style={{ borderTopColor: colour }}
       onClick={() => { if (!editing) onActivate(); }}
       onDoubleClick={() => { setDraft(name); setEditing(true); }}
       title={editing ? '' : `${name} — click to switch, double-click to rename`}>
-      <span className="source-tab-stripe" aria-hidden="true" style={{ background: colour }} />
       {editing ? (
         <input
           ref={inputRef}

@@ -4,8 +4,8 @@ import { useSettings } from './state/settings';
 import { previewClock } from './state/previewClock';
 import { keyToNudgeDelta } from './state/playhead';
 import { Preview } from './components/Preview';
-import { Timeline } from './components/Timeline';
 import { RightPanel } from './components/RightPanel';
+import { SourceTabs } from './components/SourceTabs';
 import { Sequence } from './components/Sequence';
 import { MenuActions } from './components/MenuActions';
 import { ExportProgressModal } from './components/ExportProgressModal';
@@ -83,6 +83,29 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         const t = previewClock.currentTime;
         st.addBookmark(t);
         setToast(`Bookmarked at ${fmtTime(t)}`);
+        return;
+      }
+      // Clip-marking shortcuts. [ starts a mark at the playhead, ] ends and
+      // commits, Escape cancels an in-progress mark. State lives on the
+      // store so the TransportBar's Start/End buttons share it. previewMode
+      // gates these: editing modes (set-zoom / track-marker) and the source-
+      // less idle state opt out.
+      if (st.previewMode.kind === 'set-zoom') return;
+      if (e.key === '[') {
+        e.preventDefault();
+        st.startMarking(previewClock.currentTime);
+        return;
+      }
+      if (e.key === ']') {
+        e.preventDefault();
+        if (!st.marking) return;
+        st.endMarking(previewClock.currentTime);
+        st.requestPause();
+        return;
+      }
+      if (e.key === 'Escape' && st.marking) {
+        e.preventDefault();
+        st.cancelMarking();
         return;
       }
       if (e.key === 'ArrowLeft') {
@@ -269,15 +292,13 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         </button>
       </div>
       <div className="main">
+        <SourceTabs onAddVideo={handleOpen} />
         <div className="preview-wrap">
           <Preview />
         </div>
-        <div className="timeline-wrap">
-          <Timeline />
-        </div>
       </div>
       <div className="side" ref={sideRef}>
-        <RightPanel onExport={runClipExport} onAddVideo={handleOpen} />
+        <RightPanel onExport={runClipExport} />
       </div>
       {seqMode === 'full' && (
         <div className="seq" ref={seqRef}>

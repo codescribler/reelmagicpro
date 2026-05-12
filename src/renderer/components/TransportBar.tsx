@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { useSettings } from '../state/settings';
+import { previewClock } from '../state/previewClock';
 
 function fmtTime(s: number): string {
   if (!isFinite(s) || s < 0) s = 0;
@@ -19,7 +20,25 @@ export function TransportBar({ videoRef }: { videoRef: React.RefObject<HTMLVideo
   const previewMode = useProjectStore(s => s.previewMode);
   const activeSourceId = useProjectStore(s => s.activeSourceId);
   const requestSkip = useProjectStore(s => s.requestSkip);
+  const requestPause = useProjectStore(s => s.requestPause);
+  const marking = useProjectStore(s => s.marking);
+  const startMarking = useProjectStore(s => s.startMarking);
+  const endMarking = useProjectStore(s => s.endMarking);
+  const cancelMarking = useProjectStore(s => s.cancelMarking);
   const skipSeconds = useSettings(s => s.skipSeconds);
+
+  // Start / End clip buttons live in the transport bar (rather than a
+  // separate timeline strip). Marking state is global on the store so the
+  // [ / ] / Escape keyboard handlers in App.tsx share the same source of
+  // truth. End clip pulses while marking is active to draw the eye.
+  const isMarking = marking !== null;
+  function onStartClip() { startMarking(previewClock.currentTime); }
+  function onEndClip() {
+    endMarking(previewClock.currentTime);
+    // Pause so the playhead settles on the moment the user just marked —
+    // same behaviour as the legacy `]` keyboard shortcut.
+    requestPause();
+  }
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [tickTime, setTickTime] = useState(0);
@@ -150,6 +169,29 @@ export function TransportBar({ videoRef }: { videoRef: React.RefObject<HTMLVideo
         </div>
       </div>
       <span className="transport-time">{fmtTime(localTime)} / {fmtTime(rangeDuration)}</span>
+      {!isMarking ? (
+        <button
+          className="transport-btn transport-clip-btn"
+          onClick={onStartClip}
+          title="Mark the start of a clip at the current playhead (shortcut: [)">
+          [ Start clip
+        </button>
+      ) : (
+        <>
+          <button
+            className="transport-btn transport-clip-btn is-active"
+            onClick={onEndClip}
+            title="Mark the end of the clip and save it (shortcut: ])">
+            End clip ]
+          </button>
+          <button
+            className="transport-btn"
+            onClick={cancelMarking}
+            title="Discard the in-progress clip (Esc)">
+            ×
+          </button>
+        </>
+      )}
     </div>
   );
 }

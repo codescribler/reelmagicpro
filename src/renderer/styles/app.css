@@ -65,7 +65,11 @@ body {
 .main {
   grid-area: main;
   display: grid;
-  grid-template-rows: 1fr 160px;
+  /* Tabs row at top + preview filling the rest. The legacy scrub-track row
+     (160px) is gone — Start/End clip buttons moved into the transport bar
+     and the per-clip nudge controls moved into the clip-detail panel,
+     leaving the preview to use the full vertical space. */
+  grid-template-rows: 30px 1fr;
   background: var(--bg);
   border: 1px solid var(--accent-glow);
   border-radius: 8px;
@@ -74,7 +78,6 @@ body {
   min-width: 0;
 }
 .preview-wrap { background: black; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
-.timeline-wrap { background: var(--panel); border-top: 1px solid var(--border); overflow-y: auto; }
 .side {
   grid-area: side;
   background: var(--panel);
@@ -662,65 +665,97 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   margin: 0;
 }
 
-/* Source tab strip in the right panel. One tab per source video plus a
-   "+ Add video" trailing button. Each tab carries a vertical colour stripe
-   matching the source's assigned colour so the rest of the UI (clip rows,
-   bookmark rows, sequence chips) reads the same colour for the same
-   source. Hidden affordances on hover: the × remove button and the
-   double-click-to-rename. */
+/* Source tab strip at the top of the preview area. Each tab represents one
+   source video the project knows about; the active tab "merges" visually
+   with the preview below it (its bottom border vanishes against the
+   preview's top edge — same browser-tab metaphor). On the far left, a
+   pill-shaped "+ Add video" button is set apart from the tabs by a small
+   gap so it reads as an action, not a tab. */
 .source-tabs {
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  overflow-x: auto;
   flex: 0 0 auto;
-  min-height: 30px;
+  height: 30px;
+  padding: 0 8px;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.source-tab-add {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-right: 8px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--accent-strong);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.source-tab-add:hover:not(:disabled) {
+  background: var(--panel-hover);
+  border-color: var(--accent);
 }
 .source-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px 4px 10px;
+  height: 26px;
+  padding: 0 8px 0 10px;
   font-size: 12px;
   cursor: pointer;
-  background: transparent;
-  border-right: 1px solid var(--border);
+  background: var(--panel-2);
+  /* Pre-emptive colour border on top — the per-tab style overrides this
+     with the source's colour. Bottom border vanishes when active so the
+     tab merges into the preview area. */
+  border: 1px solid var(--border);
+  border-top-width: 3px;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
   color: var(--muted);
   user-select: none;
-  position: relative;
   white-space: nowrap;
-  max-width: 180px;
+  max-width: 200px;
   transition: background-color 120ms ease, color 120ms ease;
 }
-.source-tab:hover { background: var(--panel-hover); color: var(--text); }
+.source-tab:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
 .source-tab.is-active {
-  background: var(--panel);
+  background: black;
   color: var(--text);
   font-weight: 600;
+  /* Lift the active tab so its bottom edge sits flush with the preview's
+     black background, giving the connected-to-preview look. */
+  margin-bottom: -1px;
+  z-index: 1;
 }
-.source-tab-stripe {
-  display: inline-block;
-  width: 4px;
-  align-self: stretch;
-  border-radius: 2px;
-  flex: 0 0 auto;
-}
+/* Colour stripe lives on the tab's top border (set by inline style from
+   the component) — element below is now just a label/icon, no extra DOM
+   stripe needed. The hidden element from the previous design still ships
+   so existing usages of .source-tab-stripe don't break in transition. */
+.source-tab-stripe { display: none; }
 .source-tab-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 140px;
+  max-width: 160px;
 }
 .source-tab-input {
-  background: var(--panel-2);
+  background: var(--panel);
   color: var(--text);
   border: 1px solid var(--accent);
   border-radius: 3px;
   padding: 1px 4px;
   font-size: 12px;
   font-family: inherit;
-  width: 140px;
+  width: 160px;
   outline: none;
 }
 .source-tab-remove {
@@ -743,13 +778,44 @@ input[type="text"]:focus-visible, input[type="number"]:focus-visible {
   color: white;
   border-color: var(--danger);
 }
-.source-tab-add {
-  align-self: center;
-  margin: 0 6px;
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: 14px;
+
+/* Transport-bar Start clip / End clip buttons. The default Start state is
+   subdued (matches the other transport buttons); when marking is in
+   progress, End clip is given a green halo + pulse so the next action is
+   obvious from a glance at the preview. */
+.transport-clip-btn {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-left: 6px;
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+}
+.transport-clip-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.32);
+}
+@keyframes transport-clip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-strong); }
+  50%      { box-shadow: 0 0 0 4px var(--accent-strong); }
+}
+.transport-clip-btn.is-active {
+  background: var(--accent-2);
+  color: #d8f9b3;
+  border-color: var(--accent);
+  animation: transport-clip-pulse 1.4s ease-in-out infinite;
+}
+
+/* Compact in/out nudge row inside the clip-detail panel — same control as
+   the old timeline strip exposed, just smaller and bound to the selected
+   clip in its own editor context. */
+.clip-detail-nudge {
+  margin: 6px 0 10px 0;
+  padding: 4px 8px;
   background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 11px;
 }
 
 /* Currently-playing sequence chip. A halo radiates from behind the chip via

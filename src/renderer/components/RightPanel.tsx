@@ -3,13 +3,11 @@ import { useProjectStore } from '../state/projectStore';
 import { ClipList } from './ClipList';
 import { ClipDetail } from './ClipDetail';
 import { BookmarkList } from './BookmarkList';
-import { SourceTabs } from './SourceTabs';
 
 type Tab = 'clips' | 'bookmarks';
 
-export function RightPanel({ onExport, onAddVideo }: {
+export function RightPanel({ onExport }: {
   onExport: (id: string) => void;
-  onAddVideo: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('clips');
   const project = useProjectStore(s => s.project);
@@ -35,7 +33,6 @@ export function RightPanel({ onExport, onAddVideo }: {
   const selectedClipId = useProjectStore(s => s.selectedClipId);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <SourceTabs onAddVideo={onAddVideo} />
       <div style={{
         display: 'flex',
         flex: '0 0 auto',

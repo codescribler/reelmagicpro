@@ -104,6 +104,15 @@ interface State {
   pauseRequest: { token: number } | null;
   requestPause: () => void;
 
+  // In-progress clip mark. `out: null` while between Start and End presses;
+  // never lives as `out: number` (End commits and immediately clears). Lifted
+  // out of the old Timeline component so the TransportBar's Start/End buttons
+  // and the [ / ] / Esc keyboard handlers can share a single source of truth.
+  marking: { in: number; out: null } | null;
+  startMarking: (time: number) => void;
+  endMarking: (time: number) => void;
+  cancelMarking: () => void;
+
   activeRun: { runId: string; phase: ExportProgress['phase']; percent: number; currentItem: number; totalItems: number } | null;
   exportResult: { ok: boolean; outputPath?: string; error?: string } | null;
   startRun: (runId: string) => void;
@@ -310,9 +319,12 @@ export const useProjectStore = create<State>((set, get) => ({
       activeSourceId: sourceId,
       // Switching sources via the UI implicitly returns to source-mode
       // playback for that source. Selected clip is cleared so the editor
-      // doesn't keep showing a clip from a different source.
+      // doesn't keep showing a clip from a different source. Any in-
+      // progress mark is dropped — its `in` time was in the previous
+      // source's timeline and would otherwise commit a nonsense clip.
       selectedClipId: null,
       previewMode: { kind: 'source' },
+      marking: null,
     };
   }),
   addClip: (clip) => set(state => state.project ? ({
@@ -598,6 +610,50 @@ export const useProjectStore = create<State>((set, get) => ({
   requestPause: () => set(state => ({
     pauseRequest: { token: (state.pauseRequest?.token ?? 0) + 1 },
   })),
+
+  marking: null,
+  startMarking: (time) => set(state => {
+    if (!state.project) return state;
+    const src = state.project.sources.find(s => s.id === state.activeSourceId)
+      ?? state.project.sources[0]
+      ?? null;
+    if (!src) return state;
+    const t = Math.max(0, Math.min(src.duration, time));
+    return { marking: { in: t, out: null } };
+  }),
+  endMarking: (time) => {
+    const state = get();
+    if (!state.project) return;
+    if (!state.marking) return;
+    const src = state.project.sources.find(s => s.id === state.activeSourceId)
+      ?? state.project.sources[0]
+      ?? null;
+    if (!src) return;
+    const t = Math.max(0, Math.min(src.duration, time));
+    const inT = Math.min(state.marking.in, t);
+    const outT = Math.max(state.marking.in, t);
+    // Below the 50ms floor we just discard the mark — a tap on Start
+    // immediately followed by End shouldn't drop a phantom 1-frame clip.
+    if (outT - inT < 0.05) {
+      set({ marking: null });
+      return;
+    }
+    // sourceId is stamped only when the project has multiple sources, so
+    // single-source projects keep their v1 round-trip clean.
+    const sourceId = state.project.sources.length > 1 ? src.id : undefined;
+    const newId = 'clip_' + Math.random().toString(36).slice(2, 10);
+    state.addClip({
+      id: newId,
+      name: `Untitled clip ${state.project.clips.length + 1}`,
+      in: inT, out: outT, speed: 1,
+      zoom: { x: 0, y: 0, width: src.width, height: src.height },
+      focusMarkers: [],
+      ...(sourceId ? { sourceId } : {}),
+    });
+    state.selectClip(newId);
+    set({ marking: null });
+  },
+  cancelMarking: () => set({ marking: null }),
 
   activeRun: null,
   exportResult: null,
