@@ -171,13 +171,12 @@ Football parents whose children are on the pathway and who have decided their ti
 | **Source footage** | 1 match | 1 match | up to 4 matches |
 | **Player tracking + slow-mo** | included | included | included |
 | **Music (BYO mp3)** | — | included | included |
-| **Intro card (name, position, jersey number)** | — | included | included |
 | **Turnaround** | 24 hours | 24 hours | 72 hours |
 | **Revisions** | 1 round included | 1 round included | 1 round included |
 
 **Which one is right for you?**
 - One great moment from one match → **Single Reel**.
-- Two or three moments from one match, with music and an intro card → **Match Showcase**.
+- Two or three moments from one match, with a backing track → **Match Showcase**.
 - A handful of moments pulled from across several matches (end-of-season, scout interest, multi-game form) → **Compilation Reel**.
 
 ### Why this is what it costs.
@@ -204,7 +203,7 @@ You supply the audio file as a link (your own Google Drive, Dropbox, or similar)
 The source video is deleted from the founder's machine within 14 days of delivery. We keep the finished mp4 for 90 days in case you want a re-download, then that goes too. We never use your child's footage in marketing without explicit written permission, and we will never ask.
 
 **Q: What if I am not happy with the first cut?**
-One round of revisions is included with every order — change the moments, swap the music, change the intro card, retime the slow-mo. We would rather you get the reel you wanted than save the half-hour. If a second round is needed, it is £25; that has only happened once.
+One round of revisions is included with every order — change the moments, swap the music, retime the slow-mo. We would rather you get the reel you wanted than save the half-hour. If a second round is needed, it is £25; that has only happened once.
 
 **Q: Why pay for this when I could buy the editor and do it myself?**
 You should, if you have an evening free and you want to learn the app. The app exists, it works, and most Done For You customers end up using it themselves eventually. This service exists for the matches you do not have the evening for, the reels you needed yesterday, and the parents who have already tried and would rather not try again.

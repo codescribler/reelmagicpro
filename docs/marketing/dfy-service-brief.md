@@ -102,7 +102,6 @@ The page must answer, in order:
 - Child's shirt number, kit colour, position
 - 1-5 timestamped moments to feature (depending on tier)
 - Music: BYO mp3 *(the parent owns/has rights — we do not ship a music library)*
-- Intro card text (name, age/DOB, position, jersey #, school year) — Showcase + Compilation only
 - Delivery format (16:9 mp4 default)
 - Email for delivery
 
