@@ -12,7 +12,7 @@ import type {
   BackingTrack,
 } from '../../shared/types';
 import { resolveSource } from '../../shared/resolveSource';
-import { computeInstagramFraming } from '../../shared/instagramFraming';
+import { computeReelFraming } from '../../shared/instagramFraming';
 import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
 import fs from 'fs/promises';
 import os from 'os';
@@ -31,7 +31,7 @@ function buildArgsForClip(
   opts?: { forceSilentAudio?: boolean },
 ): string[] {
   if (format === 'instagram') {
-    const framing = computeInstagramFraming(clip, source);
+    const framing = computeReelFraming(clip, source);
     return buildInstagramClipFfmpegArgs(clip, source, framing.samples, outputPath, opts);
   }
   return buildClipFfmpegArgs(clip, source, outputPath, opts);
