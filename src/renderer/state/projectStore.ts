@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, Clip, SourceMeta, SourceVideo, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack } from '../../shared/types';
+import type { Project, Clip, SourceMeta, SourceVideo, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack, ReelFraming } from '../../shared/types';
 import { newSourceId, resolveSource } from '../../shared/resolveSource';
 
 // Strip a SourceVideo down to the plain SourceMeta fields used by the
@@ -19,7 +19,8 @@ export type PreviewMode =
   | { kind: 'clip'; clipId: string }
   | { kind: 'sequence'; index: number }
   | { kind: 'set-zoom'; clipId: string }
-  | { kind: 'track-marker'; clipId: string; markerId: string };
+  | { kind: 'track-marker'; clipId: string; markerId: string }
+  | { kind: 'frame-reel'; clipId: string };
 
 interface State {
   project: Project | null;
@@ -83,6 +84,9 @@ interface State {
   updateFocusMarker: (clipId: string, markerId: string, patch: Partial<FocusMarker>) => void;
   deleteFocusMarker: (clipId: string, markerId: string) => void;
   togglePrimaryMarker: (clipId: string, markerId: string) => void;
+  // Set or clear a clip's reel-framing pan path. Pass undefined to clear (the
+  // field is deleted so saved projects stay minimal).
+  setReelFraming: (clipId: string, framing: ReelFraming | undefined) => void;
 
   addBookmark: (time: number) => void;
   updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
@@ -349,7 +353,8 @@ export const useProjectStore = create<State>((set, get) => ({
     if (
       (state.previewMode.kind === 'clip'
         || state.previewMode.kind === 'set-zoom'
-        || state.previewMode.kind === 'track-marker')
+        || state.previewMode.kind === 'track-marker'
+        || state.previewMode.kind === 'frame-reel')
       && state.previewMode.clipId === id
     ) {
       nextPreviewMode = { kind: 'source' };
@@ -375,6 +380,9 @@ export const useProjectStore = create<State>((set, get) => ({
       name: `${orig.name} (copy)`,
       zoom: { ...orig.zoom },
       focusMarkers: orig.focusMarkers.map(m => ({ ...m, id: newMarkerId() })),
+      ...(orig.reelFraming
+        ? { reelFraming: { panPath: orig.reelFraming.panPath.map(p => ({ ...p })) } }
+        : {}),
     };
     set({
       project: { ...proj, clips: [...proj.clips, copy] },
@@ -535,6 +543,17 @@ export const useProjectStore = create<State>((set, get) => ({
         return next;
       });
       return { ...c, focusMarkers };
+    });
+    return { project: { ...state.project, clips }, dirty: true };
+  }),
+  setReelFraming: (clipId, framing) => set(state => {
+    if (!state.project) return state;
+    const clips = state.project.clips.map(c => {
+      if (c.id !== clipId) return c;
+      const next = { ...c };
+      if (framing) next.reelFraming = framing;
+      else delete next.reelFraming;
+      return next;
     });
     return { project: { ...state.project, clips }, dirty: true };
   }),
