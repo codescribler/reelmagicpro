@@ -209,3 +209,38 @@ test('FocusMarker without primary field still parses (backwards-compat)', () => 
   };
   expect(() => parseAndClampProject(p)).not.toThrow();
 });
+
+test('parseAndClampProject round-trips reelFraming.panPath', () => {
+  const raw = {
+    version: 1,
+    sourceVideo: { path: '/v.mp4', duration: 100, width: 1920, height: 1080, fps: 30 },
+    clips: [{
+      id: 'c1', name: 'A', in: 1, out: 5, speed: 1,
+      zoom: { x: 0, y: 0, width: 1920, height: 1080 },
+      focusMarkers: [],
+      reelFraming: { panPath: [{ t: 0, cx: 600 }, { t: 4, cx: 1300 }] },
+    }],
+    sequence: [],
+    bookmarks: [],
+  };
+  const { project } = parseAndClampProject(raw);
+  expect(project.clips[0]!.reelFraming?.panPath).toEqual([
+    { t: 0, cx: 600 }, { t: 4, cx: 1300 },
+  ]);
+});
+
+test('parseAndClampProject loads a clip with no reelFraming as undefined', () => {
+  const raw = {
+    version: 1,
+    sourceVideo: { path: '/v.mp4', duration: 100, width: 1920, height: 1080, fps: 30 },
+    clips: [{
+      id: 'c1', name: 'A', in: 1, out: 5, speed: 1,
+      zoom: { x: 0, y: 0, width: 1920, height: 1080 },
+      focusMarkers: [],
+    }],
+    sequence: [],
+    bookmarks: [],
+  };
+  const { project } = parseAndClampProject(raw);
+  expect(project.clips[0]!.reelFraming).toBeUndefined();
+});

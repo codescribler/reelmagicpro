@@ -24,6 +24,13 @@ const FocusMarkerSchema = z.object({
   path: z.array(FocusMarkerPathPointSchema).optional(),
   primary: z.boolean().optional(),
 });
+const ReelPanPointSchema = z.object({
+  t: z.number().min(0),
+  cx: z.number(),
+});
+const ReelFramingSchema = z.object({
+  panPath: z.array(ReelPanPointSchema),
+});
 const SourceSchema = z.object({
   path: z.string(),
   duration: z.number().positive(),
@@ -53,6 +60,7 @@ const ClipSchema = z.object({
   backingTrack: BackingTrackSchema.optional(),
   brightness: z.number().min(-1).max(1).optional(),
   sourceId: z.string().optional(),
+  reelFraming: ReelFramingSchema.optional(),
 });
 const SequenceEntrySchema = z.object({ clipId: z.string().min(1) });
 const BookmarkSchema = z.object({
