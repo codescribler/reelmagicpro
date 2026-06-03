@@ -1,3 +1,4 @@
+import path from 'path';
 import type { Clip, SourceMeta, FocusMarker, BackingTrack } from '../../shared/types';
 import type { IgFramingSample } from '../../shared/instagramFraming';
 import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
@@ -126,15 +127,22 @@ function thinPathForExport<T>(path: T[], maxSegments = 40): T[] {
   return out;
 }
 
-// Best-effort font file lookup for drawtext. Used to burn marker labels onto
-// the exported video. Windows has Arial; macOS / Linux have reasonable
-// fallbacks. If the file isn't there at runtime, ffmpeg will skip the
-// drawtext filter with an error in stderr but the rest of the export still
-// succeeds.
+// Brand font for drawtext (player name labels, watermark). Oswald Bold — a
+// condensed sans-serif that matches the broadcast-style typography used in
+// football highlight reels. Bundled with the app so output looks identical
+// across Windows / macOS / Linux instead of falling back to whatever each
+// OS's "Arial" happens to render.
+//
+// Path resolution mirrors runner.ts's ffmpeg-static handling: in dev,
+// __dirname sits inside dist-electron/main/ffmpeg/ (or src/main/ffmpeg/
+// under ts-jest); in a packaged build the file is unpacked from app.asar
+// into app.asar.unpacked (see asarUnpack in electron-builder.yml). ffmpeg
+// drawtext on Windows wants forward slashes inside the filter expression.
 function fontFilePath(): string {
-  if (process.platform === 'win32') return 'C:/Windows/Fonts/arial.ttf';
-  if (process.platform === 'darwin') return '/System/Library/Fonts/Supplemental/Arial.ttf';
-  return '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+  const bundled = path.resolve(__dirname, '..', 'assets', 'fonts', 'Oswald-Bold.ttf')
+    .replace(/app\.asar([\\/])/, 'app.asar.unpacked$1')
+    .replace(/\\/g, '/');
+  return bundled;
 }
 
 // Escape a label for use inside drawtext's `text='...'` single-quoted value.
@@ -333,7 +341,7 @@ function buildMarkerFilters(clip: Clip, source: SourceMeta): string {
 // with source height, and x is set to ~10% of the source width — at 1080p
 // this lands the text well clear of the safe-area cropping that some
 // players (and social-media uploaders) apply to the leftmost ~150px.
-const WATERMARK_TEXT = 'Made with reelmagicpro.co.uk';
+const WATERMARK_TEXT = 'Made with getreelmagic.co.uk';
 
 function watermarkFilter(source: SourceMeta): string {
   const text = escapeDrawtextLabel(WATERMARK_TEXT);

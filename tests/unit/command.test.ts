@@ -1,5 +1,13 @@
+import path from 'path';
 import { buildClipFfmpegArgs, buildOutroFfmpegArgs } from '../../src/main/ffmpeg/command';
 import type { Clip, SourceMeta } from '../../src/shared/types';
+
+// Mirrors the bundled-font path resolution in command.ts:fontFilePath().
+// Tests run under ts-jest, so __dirname for the command module sits at
+// src/main/ffmpeg — the resolved path lands on the real bundled font.
+const BUNDLED_FONT = path
+  .resolve(__dirname, '..', '..', 'src', 'main', 'assets', 'fonts', 'Oswald-Bold.ttf')
+  .replace(/\\/g, '/');
 
 const source: SourceMeta = { path: '/in.mp4', duration: 100, width: 1920, height: 1080, fps: 30 };
 const baseClip: Clip = {
@@ -9,17 +17,12 @@ const baseClip: Clip = {
 };
 
 // Mirrors the watermark string the implementation appends to every clip's
-// filter chain. Platform-aware because the fontfile path differs by OS.
+// filter chain. Uses the bundled brand font shared with marker labels.
 function expectedWatermark(s: SourceMeta): string {
-  const fontFile = process.platform === 'win32'
-    ? 'C:/Windows/Fonts/arial.ttf'
-    : process.platform === 'darwin'
-      ? '/System/Library/Fonts/Supplemental/Arial.ttf'
-      : '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
   const fontSize = Math.max(14, Math.round(s.height * 0.022));
   const x = Math.round(s.width * 0.1);
   const y = Math.max(12, Math.round(s.height * 0.02));
-  return `drawtext=fontfile='${fontFile}':text='Made with reelmagicpro.co.uk'`
+  return `drawtext=fontfile='${BUNDLED_FONT}':text='Made with getreelmagic.co.uk'`
     + `:x=${x}:y=${y}`
     + `:fontcolor=white:fontsize=${fontSize}`
     + `:borderw=2:bordercolor=black@0.7`;
@@ -212,7 +215,7 @@ test('emits per-segment geq filters for a path-based oval marker', () => {
   expect(filter).not.toMatch(/geq=[^,]*if\(lt\(t/);
 });
 
-test('burns the reelmagicpro.co.uk watermark into every clip export', () => {
+test('burns the getreelmagic.co.uk watermark into every clip export', () => {
   // Branding sits in the top-left safe-area of every export, indented ~10%
   // of source width so it clears the left-edge cropping that some players
   // and social uploads apply. It goes after the marker filters so a focus
@@ -220,7 +223,7 @@ test('burns the reelmagicpro.co.uk watermark into every clip export', () => {
   const args = buildClipFfmpegArgs(baseClip, source, '/out.mp4');
   const fcIndex = args.indexOf('-filter_complex');
   const filter = args[fcIndex + 1]!;
-  expect(filter).toContain("text='Made with reelmagicpro.co.uk'");
+  expect(filter).toContain("text='Made with getreelmagic.co.uk'");
   expect(filter).toContain('fontcolor=white');
   expect(filter).toContain('fontsize=24');
   // 10% of 1920 = 192; y stays a thin top margin (~22 at 1080p).
@@ -322,7 +325,7 @@ test('instagramWatermarkFilter scales font size against the shorter dimension', 
   expect(filter).toMatch(/fontsize=24/);
   expect(filter).toMatch(/:x=108:/);
   expect(filter).toMatch(/:y=22:/);
-  expect(filter).toContain("text='Made with reelmagicpro.co.uk'");
+  expect(filter).toContain("text='Made with getreelmagic.co.uk'");
   expect(filter).toContain('fontcolor=white');
   expect(filter).toContain('borderw=2:bordercolor=black@0.7');
 });

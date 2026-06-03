@@ -4,7 +4,7 @@
   "private": true,
   "main": "dist-electron/main/main.js",
   "scripts": {
-    "build:main": "tsc -p tsconfig.main.json",
+    "build:main": "tsc -p tsconfig.main.json && node scripts/copy-main-assets.js",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "dev:renderer": "vite",

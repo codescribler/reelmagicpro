@@ -9,6 +9,11 @@ files:
 asarUnpack:
   - "node_modules/ffmpeg-static/**"
   - "node_modules/ffprobe-static/**"
+  # Bundled fonts for ffmpeg drawtext. ffmpeg runs as a separate process and
+  # cannot read files from inside app.asar, so the font folder must be
+  # unpacked. fontFilePath() rewrites app.asar → app.asar.unpacked at runtime
+  # to find the file here.
+  - "dist-electron/main/assets/**"
 fileAssociations:
   - ext: rmproj
     name: ReelMagic Project
