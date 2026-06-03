@@ -40,7 +40,7 @@ test('exportClip in instagram format produces a 1080x1920 file', async () => {
   fs.unlinkSync(out);
 });
 
-test('exportClip in instagram format with no focus marker uses focus-box centre fallback', async () => {
+test('exportClip in instagram format with no reelFraming uses centred fallback', async () => {
   const source = await probeVideo(FIXTURE);
   const out = path.join(os.tmpdir(), `rm-test-ig-fb-${Date.now()}.mp4`);
   const r = await exportClip({
@@ -49,6 +49,32 @@ test('exportClip in instagram format with no focus marker uses focus-box centre 
       id: 'c1', name: 'A', in: 1, out: 3, speed: 1,
       zoom: { x: 0, y: 0, width: source.width, height: source.height },
       focusMarkers: [],
+    },
+    source,
+    outputPath: out,
+    format: 'instagram',
+  });
+  expect(r.ok).toBe(true);
+  const probed = await probeVideo(out);
+  expect(probed.width).toBe(INSTAGRAM_REEL_WIDTH);
+  expect(probed.height).toBe(INSTAGRAM_REEL_HEIGHT);
+  fs.unlinkSync(out);
+});
+
+test('exportClip in instagram format with a reelFraming pan path produces 1080x1920', async () => {
+  const source = await probeVideo(FIXTURE);
+  const out = path.join(os.tmpdir(), `rm-test-ig-pan-${Date.now()}.mp4`);
+  const side = Math.min(source.width, source.height);
+  const r = await exportClip({
+    runId: 'tig-pan',
+    clip: {
+      id: 'c1', name: 'A', in: 1, out: 3, speed: 1,
+      zoom: { x: 0, y: 0, width: source.width, height: source.height },
+      focusMarkers: [],
+      reelFraming: { panPath: [
+        { t: 0, cx: side / 2 },
+        { t: 2, cx: source.width - side / 2 },
+      ] },
     },
     source,
     outputPath: out,

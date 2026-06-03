@@ -546,7 +546,7 @@ export function buildInstagramClipFfmpegArgs(
 
   const videoFilter = `[0:v]`
     + (markerFilters ? `${markerFilters},` : '')
-    + `crop=${fmt(side)}:${fmt(side)}:x='${xExpr}':${fmt(cropY)}`
+    + `crop=${fmt(side)}:${fmt(side)}:${xExpr}:${fmt(cropY)}`
     + `,scale=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_WIDTH}`
     + `,pad=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}:0:${fmt(padY)}:color=black`
     + `,${igWatermark}`
