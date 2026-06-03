@@ -51,6 +51,21 @@ export interface FocusMarker {
   primary?: boolean;
 }
 
+// A single horizontal-pan sample for reel framing. The reel box is always
+// vertically centred and square-sized (see computeReelFraming), so only the
+// horizontal centre varies over time.
+export interface ReelPanPoint {
+  t: number;   // clip-relative seconds (0 = clip.in)
+  cx: number;  // reel-box centre x in source pixels
+}
+
+// Direct reel (9:16) framing for a clip. When present it drives the Instagram
+// export crop; when absent the reel is a static, centred slice. Replaces the
+// old focus-marker-derived framing.
+export interface ReelFraming {
+  panPath: ReelPanPoint[]; // sorted by t ascending
+}
+
 // Optional music track that plays over the exported clip. Volume is 0–1
 // (≈ amplitude multiplier — 1 means the mp3's own level). muteSource hides
 // the source video's own audio so the mp3 plays alone; below 1× speed the
@@ -79,6 +94,9 @@ export interface Clip {
   // `project.sources[0]`. New projects with multiple sources set this
   // explicitly; legacy single-source projects leave it undefined.
   sourceId?: string;
+  // Direct reel-framing pan path. When set, the Instagram export pans the 9:16
+  // crop horizontally along this path; when undefined the reel is centred.
+  reelFraming?: ReelFraming;
 }
 
 export interface SequenceEntry {
