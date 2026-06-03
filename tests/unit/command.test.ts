@@ -353,33 +353,38 @@ test('buildInstagramOutroFfmpegArgs synthesises silent audio when source has non
 });
 
 import { buildInstagramClipFfmpegArgs } from '../../src/main/ffmpeg/command';
-import { computeInstagramFraming } from '../../src/shared/instagramFraming';
+import { computeReelFraming } from '../../src/shared/instagramFraming';
 
-test('buildInstagramClipFfmpegArgs adds an IG crop+scale stage and IG watermark', () => {
+test('buildInstagramClipFfmpegArgs builds square crop → 1080x1080 scale → letterbox pad', () => {
   const clip: Clip = { ...baseClip };
-  const framing = computeInstagramFraming(clip, source);
+  const framing = computeReelFraming(clip, source);
   const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
   const fcIdx = args.indexOf('-filter_complex');
   const fc = args[fcIdx + 1]!;
-  expect(fc).toContain('crop=1920:1080:0:0,scale=1920:1080');
-  expect(fc.match(/crop=/g)?.length).toBe(2);
-  expect(fc).toContain('scale=1080:1920');
-  expect(fc).toMatch(/fontsize=24/);
+  // cropSide = min(1080,1920) = 1080; centred cx = 960 → x = 960 - 540 = 420.
+  // (x is a piecewise expr; match its shape rather than an exact literal.)
+  expect(fc).toMatch(/crop=1080:1080:x='[^']*':0,scale=1080:1080/);
+  expect(fc).toContain('420'); // the centred x value appears in the expression
+  expect(fc).toContain('pad=1080:1920:0:420:color=black');
+  expect(fc).not.toContain('crop=1920:1080'); // no focus-box zoom crop in reels
+  expect(fc).toMatch(/fontsize=24/);          // IG watermark sized for short dim
   const aspectIdx = args.indexOf('-aspect');
   expect(args[aspectIdx + 1]).toBe('1080:1920');
 });
 
-test('buildInstagramClipFfmpegArgs preserves marker filters in the chain', () => {
+test('buildInstagramClipFfmpegArgs burns in highlight markers (source space, before the crop)', () => {
   const clip: Clip = {
     ...baseClip,
     focusMarkers: [
       { id: 'm1', x: 100, y: 200, width: 80, height: 80, in: 12, out: 18, color: 'yellow' },
     ],
   };
-  const framing = computeInstagramFraming(clip, source);
+  const framing = computeReelFraming(clip, source);
   const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
-  const fcIdx = args.indexOf('-filter_complex');
-  expect(args[fcIdx + 1]).toContain('drawbox=');
+  const fc = args[args.indexOf('-filter_complex') + 1]!;
+  expect(fc).toContain('drawbox=');
+  // Marker is drawn before the square crop so it lives in source coordinates.
+  expect(fc.indexOf('drawbox=')).toBeLessThan(fc.indexOf('crop=1080:1080'));
 });
 
 test('standard buildClipFfmpegArgs is byte-identical for a fixture clip (regression guard)', () => {

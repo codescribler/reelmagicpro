@@ -1,6 +1,7 @@
 import path from 'path';
 import type { Clip, SourceMeta, FocusMarker, BackingTrack } from '../../shared/types';
-import type { IgFramingSample } from '../../shared/instagramFraming';
+import type { ReelFramingSample } from '../../shared/instagramFraming';
+import { reelCropSide } from '../../shared/instagramFraming';
 import { INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT } from '../../shared/instagramFormat';
 
 function fmt(n: number): string {
@@ -512,44 +513,42 @@ export function buildClipFfmpegArgs(
 }
 
 // IG variant of buildClipFfmpegArgs. Pipeline:
-//   crop(zoom) → scale(srcW:srcH) → markers
-//     → crop(igX(t), igY(t), igW(t), igH(t))   // smoothed, time-varying
-//     → scale(IG_W:IG_H)
-//     → watermark (sized for IG canvas)
-//     → setpts → [v]
+//   [optional] markers (drawn in SOURCE space — no focus-box zoom for reels)
+//   → crop(cropSide × cropSide, full height, at x(t))   // square slice
+//   → scale(1080:1080)
+//   → pad(1080:1920, black bars top/bottom)
+//   → IG watermark → brightness → setpts → [v]
 //
-// The IG crop expressions are piecewise functions of `t` (clip-relative
-// seconds) — `crop` re-evaluates per frame, so this works directly. Coords
-// in `framingSamples` are SOURCE-PIXEL coords (matching marker.x/y); we
-// map them into post-zoom space the same way buildMarkerFilters does.
+// `samples` carry the (smoothed, clamped, thinned) crop rect over time. cy/w/h
+// are constant (square, centred); only cx varies. crop re-evaluates x per frame
+// from a piecewise expression of `t` (clip-relative, since -ss shifts t=0 to
+// clip.in).
 export function buildInstagramClipFfmpegArgs(
   clip: Clip,
   source: SourceMeta,
-  framingSamples: IgFramingSample[],
+  samples: ReelFramingSample[],
   outputPath: string,
   opts?: { forceSilentAudio?: boolean },
 ): string[] {
-  const z = clip.zoom;
-  const sx = source.width / z.width;
-  const sy = source.height / z.height;
-  const cxPts = framingSamples.map(s => ({ t: s.t, v: (s.cx - z.x) * sx }));
-  const cyPts = framingSamples.map(s => ({ t: s.t, v: (s.cy - z.y) * sy }));
-  const wPts  = framingSamples.map(s => ({ t: s.t, v: s.w * sx }));
-  const hPts  = framingSamples.map(s => ({ t: s.t, v: s.h * sy }));
-  const wExpr = piecewiseExpr(wPts);
-  const hExpr = piecewiseExpr(hPts);
-  const xExpr = `(${piecewiseExpr(cxPts)})-(${wExpr})/2`;
-  const yExpr = `(${piecewiseExpr(cyPts)})-(${hExpr})/2`;
+  const side = reelCropSide(source);
+  const cropY = (source.height - side) / 2; // 0 for landscape (side === srcH)
+  const xPts = samples.map(s => ({ t: s.t, v: s.cx - side / 2 }));
+  const xExpr = piecewiseExpr(xPts);
 
   const setpts = clip.speed === 1 ? 'PTS-STARTPTS' : `(PTS-STARTPTS)/${fmt(clip.speed)}`;
-  const markerFilters = buildMarkerFilters(clip, source);
+  // Reels ignore the clip's focus-box zoom, so markers are drawn against the
+  // full source frame. Passing a full-frame zoom makes buildMarkerFilters use
+  // an identity (scale=1, offset=0) source→frame mapping.
+  const fullZoom = { x: 0, y: 0, width: source.width, height: source.height };
+  const markerFilters = buildMarkerFilters({ ...clip, zoom: fullZoom }, source);
   const igWatermark = instagramWatermarkFilter(INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT);
+  const padY = (INSTAGRAM_REEL_HEIGHT - INSTAGRAM_REEL_WIDTH) / 2;
 
-  const videoFilter = `[0:v]crop=${fmt(z.width)}:${fmt(z.height)}:${fmt(z.x)}:${fmt(z.y)}`
-    + `,scale=${source.width}:${source.height}`
-    + (markerFilters ? `,${markerFilters}` : '')
-    + `,crop=w='${wExpr}':h='${hExpr}':x='${xExpr}':y='${yExpr}'`
-    + `,scale=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}`
+  const videoFilter = `[0:v]`
+    + (markerFilters ? `${markerFilters},` : '')
+    + `crop=${fmt(side)}:${fmt(side)}:x='${xExpr}':${fmt(cropY)}`
+    + `,scale=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_WIDTH}`
+    + `,pad=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}:0:${fmt(padY)}:color=black`
     + `,${igWatermark}`
     + brightnessFilter(clip.brightness)
     + `,setpts=${setpts}[v]`;
