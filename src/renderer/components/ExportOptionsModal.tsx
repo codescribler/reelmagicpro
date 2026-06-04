@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { ExportFormat, Clip, SourceMeta } from '../../shared/types';
 import { InstagramPreviewCanvas } from './InstagramPreviewCanvas';
-import { computeInstagramFraming } from '../../shared/instagramFraming';
 
 export interface ExportOptionsResult {
   ok: boolean;
@@ -88,13 +87,11 @@ export function ExportOptionsModal(props: {
   );
 }
 
-function driverSummary(clip: Clip, source: SourceMeta): string {
-  const r = computeInstagramFraming(clip, source);
-  if (!r.driverMarkerId) return 'No focus marker — using focus box centre. Tracking will be static.';
-  const m = clip.focusMarkers.find(fm => fm.id === r.driverMarkerId);
-  const label = m?.label?.trim() ? m.label : `marker ${r.driverMarkerId}`;
-  const tracked = m?.path && m.path.length > 0
-    ? `tracked, ${(m.path[m.path.length - 1]!.t - m.path[0]!.t).toFixed(1)}s`
-    : 'static';
-  return `Following marker: '${label}' (${tracked})`;
+function driverSummary(clip: Clip, _source: SourceMeta): string {
+  const path = clip.reelFraming?.panPath;
+  if (!path || path.length < 2) {
+    return 'Reel not framed — using a static, centred crop.';
+  }
+  const span = (path[path.length - 1]!.t - path[0]!.t).toFixed(1);
+  return `Reel framed — panned over ${span}s.`;
 }
