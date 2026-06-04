@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Clip, SourceMeta } from '../../shared/types';
-import { computeInstagramFraming, IgFramingSample } from '../../shared/instagramFraming';
+import { computeReelFraming, ReelFramingSample } from '../../shared/instagramFraming';
 
 const DISPLAY_W = 270;
 const DISPLAY_H = 480;
@@ -20,9 +20,9 @@ export function InstagramPreviewCanvas(props: {
   const [time, setTime] = useState(0);
 
   // Memoise the smoothed framing for the clip — pure, cheap to recompute.
-  const framingRef = useRef<{ samples: IgFramingSample[] } | null>(null);
+  const framingRef = useRef<{ samples: ReelFramingSample[] } | null>(null);
   useEffect(() => {
-    framingRef.current = computeInstagramFraming(clip, source);
+    framingRef.current = computeReelFraming(clip, source);
   }, [clip, source]);
 
   // Drive the canvas off rAF so it stays in sync with playback while playing.
@@ -38,11 +38,16 @@ export function InstagramPreviewCanvas(props: {
         if (s) {
           const ctx = c.getContext('2d');
           if (ctx) {
-            ctx.clearRect(0, 0, c.width, c.height);
+            // Letterbox: clear to black, then draw the square slice into the
+            // vertically-centred band (matches the exported reel).
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, c.width, c.height);
+            const bandH = c.width; // square slice scaled to canvas width → square band
+            const dy = (c.height - bandH) / 2;
             ctx.drawImage(
               v,
               s.cx - s.w / 2, s.cy - s.h / 2, s.w, s.h,
-              0, 0, c.width, c.height,
+              0, dy, c.width, bandH,
             );
           }
         }
@@ -101,7 +106,7 @@ export function InstagramPreviewCanvas(props: {
 
 // Linear-interpolate the framing series at a given time. The framing series
 // is sparse (≤ 41 endpoints); between samples we lerp position and size.
-function sampleFraming(samples: IgFramingSample[], t: number): IgFramingSample | null {
+function sampleFraming(samples: ReelFramingSample[], t: number): ReelFramingSample | null {
   if (samples.length === 0) return null;
   if (t <= samples[0]!.t) return samples[0]!;
   if (t >= samples[samples.length - 1]!.t) return samples[samples.length - 1]!;

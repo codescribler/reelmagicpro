@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Clip, SourceMeta } from '../../shared/types';
-import { computeInstagramFraming, IgFramingSample } from '../../shared/instagramFraming';
+import { computeReelFraming, ReelFramingSample } from '../../shared/instagramFraming';
 import { previewClock } from '../state/previewClock';
 
 // Overlay that draws the IG-format crop rectangle on top of the main preview.
@@ -16,11 +16,11 @@ export function InstagramCropOverlay(props: {
   fit: number;
 }) {
   const { clip, source, fit } = props;
-  const samplesRef = useRef<IgFramingSample[]>([]);
+  const samplesRef = useRef<ReelFramingSample[]>([]);
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    samplesRef.current = computeInstagramFraming(clip, source).samples;
+    samplesRef.current = computeReelFraming(clip, source).samples;
   }, [clip, source]);
 
   // Refresh on rAF so the rectangle follows the playhead while playing.
@@ -69,7 +69,7 @@ export function InstagramCropOverlay(props: {
   );
 }
 
-function sampleFraming(samples: IgFramingSample[], t: number): IgFramingSample | null {
+function sampleFraming(samples: ReelFramingSample[], t: number): ReelFramingSample | null {
   if (samples.length === 0) return null;
   if (t <= samples[0]!.t) return samples[0]!;
   if (t >= samples[samples.length - 1]!.t) return samples[samples.length - 1]!;
