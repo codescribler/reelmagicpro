@@ -380,10 +380,14 @@ export function Preview() {
   const isSetZoom = previewMode.kind === 'set-zoom';
   const isTrackMarker = previewMode.kind === 'track-marker';
   const isFrameReel = previewMode.kind === 'frame-reel';
-  // While placing a focus box, tracking a marker, or framing the reel we
-  // temporarily disable the zoom transform so the user interacts with the full
-  // source frame.
-  const suspendZoom = isSetZoom || isTrackMarker || isFrameReel;
+  // set-zoom and track-marker interact with the FULL source frame, so the zoom
+  // transform is suspended for them. Reel framing pans within the ZOOMED frame
+  // (reels apply the focus-box zoom), so it KEEPS the zoom transform applied —
+  // what you frame is the post-zoom picture that gets exported.
+  const suspendZoom = isSetZoom || isTrackMarker;
+  // Any overlay mode hides the play/scrub affordances so the overlay owns the
+  // picture surface.
+  const isOverlayMode = suspendZoom || isFrameReel;
 
   let zoomTransform = '';
   let zoomFactor = 1;
@@ -506,14 +510,14 @@ export function Preview() {
             transport bar (lower z-index) so transport buttons keep their own
             click handling. Hidden in set-zoom / track-marker so those modes
             keep the picture as a drawing surface. */}
-        {!suspendZoom && (
+        {!isOverlayMode && (
           <div
             onClick={togglePlay}
             title="Click to play/pause"
             className="play-overlay"
           />
         )}
-        {isZoomed && !suspendZoom && (
+        {isZoomed && !isOverlayMode && (
           <div className="zoom-indicator">
             {zoomFactor.toFixed(1)}× zoom
           </div>
@@ -548,7 +552,7 @@ export function Preview() {
             displayHeight={dh}
           />
         )}
-        {!suspendZoom && <TransportBar videoRef={videoRef} />}
+        {!isOverlayMode && <TransportBar videoRef={videoRef} />}
       </div>
     </div>
   );
