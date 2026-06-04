@@ -355,24 +355,26 @@ test('buildInstagramOutroFfmpegArgs synthesises silent audio when source has non
 import { buildInstagramClipFfmpegArgs } from '../../src/main/ffmpeg/command';
 import { computeReelFraming } from '../../src/shared/instagramFraming';
 
-test('buildInstagramClipFfmpegArgs builds square crop → 1080x1080 scale → letterbox pad', () => {
+test('buildInstagramClipFfmpegArgs applies zoom, then square crop → 1080x1080 → letterbox pad', () => {
   const clip: Clip = { ...baseClip };
   const framing = computeReelFraming(clip, source);
   const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
   const fcIdx = args.indexOf('-filter_complex');
   const fc = args[fcIdx + 1]!;
-  // cropSide = min(1080,1920) = 1080; centred cx = 960 → x = 960 - 540 = 420.
-  // (x is a piecewise expr; match its shape rather than an exact literal.)
-  expect(fc).toMatch(/crop=1080:1080:[^:]+:0,scale=1080:1080/);
+  // Focus-box zoom is applied first (full frame for baseClip → crop=1920:1080:0:0),
+  // then the square reel slice. cropSide = min(1080,1920) = 1080; centred cx = 960
+  // → x = 960 - 540 = 420. (x is a piecewise expr; match its shape.)
+  expect(fc).toContain('crop=1920:1080:0:0,scale=1920:1080'); // zoom prefix
+  expect(fc).toMatch(/crop=1080:1080:[^:]+:0,scale=1080:1080/); // square reel slice
+  expect(fc.match(/crop=/g)?.length).toBe(2);                   // zoom crop + reel crop
   expect(fc).toContain('420'); // the centred x value appears in the expression
   expect(fc).toContain('pad=1080:1920:0:420:color=black');
-  expect(fc).not.toContain('crop=1920:1080'); // no focus-box zoom crop in reels
   expect(fc).toMatch(/fontsize=24/);          // IG watermark sized for short dim
   const aspectIdx = args.indexOf('-aspect');
   expect(args[aspectIdx + 1]).toBe('1080:1920');
 });
 
-test('buildInstagramClipFfmpegArgs burns in highlight markers (source space, before the crop)', () => {
+test('buildInstagramClipFfmpegArgs burns in highlight markers (post-zoom, before the reel slice)', () => {
   const clip: Clip = {
     ...baseClip,
     focusMarkers: [
@@ -383,7 +385,7 @@ test('buildInstagramClipFfmpegArgs burns in highlight markers (source space, bef
   const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
   const fc = args[args.indexOf('-filter_complex') + 1]!;
   expect(fc).toContain('drawbox=');
-  // Marker is drawn before the square crop so it lives in source coordinates.
+  // Marker is drawn after the zoom scale but before the square reel slice.
   expect(fc.indexOf('drawbox=')).toBeLessThan(fc.indexOf('crop=1080:1080'));
 });
 
