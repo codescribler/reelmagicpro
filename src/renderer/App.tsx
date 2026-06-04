@@ -9,6 +9,7 @@ import { SourceTabs } from './components/SourceTabs';
 import { Sequence } from './components/Sequence';
 import { MenuActions } from './components/MenuActions';
 import { ExportProgressModal } from './components/ExportProgressModal';
+import { ExportOptionsModal, ExportOptionsContext, ExportOptionsResult } from './components/ExportOptionsModal';
 import { SettingsModal } from './components/SettingsModal';
 import { EmptyState } from './components/EmptyState';
 import { LicenceGate } from './components/LicenceGate';
@@ -42,6 +43,10 @@ function Editor({ pastDue }: { pastDue: boolean }) {
   const seqRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Pending export awaiting a format choice. Set when the user hits Export;
+  // cleared when the options dialog resolves. The chosen format (Standard or
+  // Instagram/reel) is threaded into the actual export call.
+  const [exportOptions, setExportOptions] = useState<ExportOptionsContext | null>(null);
 
   // Mirror modal-open state into a ref so the keydown handler (attached once)
   // can read the latest value without re-attaching on every state change.
@@ -196,7 +201,9 @@ function Editor({ pastDue }: { pastDue: boolean }) {
     } else if (r.error) alert(`Couldn't read this file: ${r.error}`);
   }
 
-  async function runClipExport(clipId: string) {
+  // Export buttons open the format dialog first (Standard vs Instagram/reel).
+  // The actual render happens in handleExportResolve once a format is picked.
+  function runClipExport(clipId: string) {
     if (!project) return;
     const clip = project.clips.find(c => c.id === clipId);
     if (!clip) return;
@@ -206,30 +213,48 @@ function Editor({ pastDue }: { pastDue: boolean }) {
     const clipSource = project.sources.find(s => s.id === clip.sourceId)
       ?? project.sources[0]
       ?? project.sourceVideo;
-    const out = await window.reelmagic.chooseExportPath(`${clip.name}.mp4`);
-    if (!out.ok || !out.path) return;
-    const runId = 'r_' + Math.random().toString(36).slice(2, 10);
-    startRun(runId);
-    const r = await window.reelmagic.exportClip({
-      runId, clip, source: clipSource, outputPath: out.path,
-    });
-    setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
+    setExportOptions({ kind: 'clip', clip, source: clipSource });
   }
 
-  async function runSequenceExport() {
+  function runSequenceExport() {
     if (!project) return;
     if (project.sequence.length === 0) return;
-    const out = await window.reelmagic.chooseExportPath(`sequence.mp4`);
-    if (!out.ok || !out.path) return;
+    const firstEntry = project.sequence[0];
+    const firstClip = firstEntry
+      ? project.clips.find(c => c.id === firstEntry.clipId)
+      : undefined;
+    const source = project.sources[0] ?? project.sourceVideo;
+    setExportOptions({ kind: 'sequence', firstClip, source });
+  }
+
+  // Resolve the export-options dialog: on Continue, pick an output path and run
+  // the export in the chosen format; on Cancel, just close the dialog.
+  async function handleExportResolve(result: ExportOptionsResult) {
+    const ctx = exportOptions;
+    setExportOptions(null);
+    if (!ctx || !result.ok || !result.format || !project) return;
+    const format = result.format;
     const runId = 'r_' + Math.random().toString(36).slice(2, 10);
-    startRun(runId);
-    const r = await window.reelmagic.exportSequence({
-      runId, clips: project.clips, sequence: project.sequence,
-      sources: project.sources, outputPath: out.path,
-      sequenceBackingTrack: project.sequenceBackingTrack,
-      sequenceBrightness: project.sequenceBrightness,
-    });
-    setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
+    if (ctx.kind === 'clip') {
+      const out = await window.reelmagic.chooseExportPath(`${ctx.clip.name}.mp4`);
+      if (!out.ok || !out.path) return;
+      startRun(runId);
+      const r = await window.reelmagic.exportClip({
+        runId, clip: ctx.clip, source: ctx.source, outputPath: out.path, format,
+      });
+      setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
+    } else {
+      const out = await window.reelmagic.chooseExportPath(`sequence.mp4`);
+      if (!out.ok || !out.path) return;
+      startRun(runId);
+      const r = await window.reelmagic.exportSequence({
+        runId, clips: project.clips, sequence: project.sequence,
+        sources: project.sources, outputPath: out.path, format,
+        sequenceBackingTrack: project.sequenceBackingTrack,
+        sequenceBrightness: project.sequenceBrightness,
+      });
+      setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
+    }
   }
 
   if (!project) {
@@ -311,6 +336,13 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         </div>
       )}
       <ExportProgressModal />
+      {exportOptions && (
+        <ExportOptionsModal
+          open
+          context={exportOptions}
+          onResolve={handleExportResolve}
+        />
+      )}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       {toast && (
         <div className="toast" style={{
