@@ -408,7 +408,7 @@ test('buildInstagramClipFfmpegArgs builds square crop → 1080x1080 scale → le
   const fc = args[fcIdx + 1]!;
   // cropSide = min(1080,1920) = 1080; centred cx = 960 → x = 960 - 540 = 420.
   // (x is a piecewise expr; match its shape rather than an exact literal.)
-  expect(fc).toMatch(/crop=1080:1080:x='[^']*':0,scale=1080:1080/);
+  expect(fc).toMatch(/crop=1080:1080:[^:]+:0,scale=1080:1080/);
   expect(fc).toContain('420'); // the centred x value appears in the expression
   expect(fc).toContain('pad=1080:1920:0:420:color=black');
   expect(fc).not.toContain('crop=1920:1080'); // no focus-box zoom crop in reels
@@ -492,7 +492,7 @@ export function buildInstagramClipFfmpegArgs(
 
   const videoFilter = `[0:v]`
     + (markerFilters ? `${markerFilters},` : '')
-    + `crop=${fmt(side)}:${fmt(side)}:x='${xExpr}':${fmt(cropY)}`
+    + `crop=${fmt(side)}:${fmt(side)}:${xExpr}:${fmt(cropY)}`  // positional x; piecewiseExpr escapes commas as \, so no quotes/x= needed (quoted/named form breaks ffmpeg's crop)
     + `,scale=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_WIDTH}`
     + `,pad=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}:0:${fmt(padY)}:color=black`
     + `,${igWatermark}`
