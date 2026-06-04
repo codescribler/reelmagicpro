@@ -5,6 +5,7 @@ import { markerCentreAt } from '../state/markerPosition';
 import { clampPlayhead, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
+import { ReelFrameOverlay } from './ReelFrameOverlay';
 import { TransportBar } from './TransportBar';
 import { resolveSource, resolveSourceForClip } from '../../shared/resolveSource';
 
@@ -29,7 +30,8 @@ export function Preview() {
     if (!project) return null;
     if (previewMode.kind === 'clip'
       || previewMode.kind === 'set-zoom'
-      || previewMode.kind === 'track-marker') {
+      || previewMode.kind === 'track-marker'
+      || previewMode.kind === 'frame-reel') {
       return project.clips.find(c => c.id === previewMode.clipId) ?? null;
     }
     if (previewMode.kind === 'sequence') {
@@ -377,9 +379,11 @@ export function Preview() {
 
   const isSetZoom = previewMode.kind === 'set-zoom';
   const isTrackMarker = previewMode.kind === 'track-marker';
-  // While placing or tracking a focus marker we temporarily disable the zoom
-  // transform so the user can interact with the full source frame.
-  const suspendZoom = isSetZoom || isTrackMarker;
+  const isFrameReel = previewMode.kind === 'frame-reel';
+  // While placing a focus box, tracking a marker, or framing the reel we
+  // temporarily disable the zoom transform so the user interacts with the full
+  // source frame.
+  const suspendZoom = isSetZoom || isTrackMarker || isFrameReel;
 
   let zoomTransform = '';
   let zoomFactor = 1;
@@ -527,6 +531,16 @@ export function Preview() {
           <TrackMarkerOverlay
             clip={activeClip}
             markerId={previewMode.markerId}
+            videoRef={videoRef}
+            sourceWidth={sw}
+            sourceHeight={sh}
+            displayWidth={dw}
+            displayHeight={dh}
+          />
+        )}
+        {isFrameReel && previewMode.kind === 'frame-reel' && activeClip && (
+          <ReelFrameOverlay
+            clip={activeClip}
             videoRef={videoRef}
             sourceWidth={sw}
             sourceHeight={sh}
