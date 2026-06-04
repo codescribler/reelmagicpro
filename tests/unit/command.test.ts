@@ -51,9 +51,19 @@ test('uses silent audio and (PTS-STARTPTS)/s when speed != 1', () => {
   expect(args).toContain('lavfi');
   expect(args).toContain('anullsrc=cl=stereo:r=48000');
   const fcIndex = args.indexOf('-filter_complex');
-  expect(args[fcIndex + 1]).toBe(`[0:v]crop=1920:1080:0:0,scale=1920:1080,${expectedWatermark(source)},setpts=(PTS-STARTPTS)/0.5[v]`);
+  expect(args[fcIndex + 1]).toBe(`[0:v]crop=1920:1080:0:0,scale=1920:1080,${expectedWatermark(source)},setpts=(PTS-STARTPTS)/0.5,minterpolate=fps=30:mi_mode=blend[v]`);
   expect(args).toContain('-shortest');
   expect(args).toContain('1:a');
+});
+
+test('slow-mo blends frames after setpts; normal speed does not', () => {
+  const slow = buildClipFfmpegArgs({ ...baseClip, speed: 0.5 }, source, '/out.mp4');
+  const slowFc = slow[slow.indexOf('-filter_complex') + 1]!;
+  // Blend comes immediately after the slowing setpts (motion blur, no warping).
+  expect(slowFc).toContain('setpts=(PTS-STARTPTS)/0.5,minterpolate=fps=30:mi_mode=blend');
+
+  const normal = buildClipFfmpegArgs(baseClip, source, '/out.mp4');
+  expect(normal[normal.indexOf('-filter_complex') + 1]!).not.toContain('minterpolate');
 });
 
 test('uses zoom rect in crop and rescales to source size', () => {
@@ -387,6 +397,14 @@ test('buildInstagramClipFfmpegArgs burns in highlight markers (post-zoom, before
   expect(fc).toContain('drawbox=');
   // Marker is drawn after the zoom scale but before the square reel slice.
   expect(fc.indexOf('drawbox=')).toBeLessThan(fc.indexOf('crop=1080:1080'));
+});
+
+test('buildInstagramClipFfmpegArgs blends slow-mo after setpts', () => {
+  const clip: Clip = { ...baseClip, speed: 0.5 };
+  const framing = computeReelFraming(clip, source);
+  const args = buildInstagramClipFfmpegArgs(clip, source, framing.samples, '/out.mp4');
+  const fc = args[args.indexOf('-filter_complex') + 1]!;
+  expect(fc).toContain('setpts=(PTS-STARTPTS)/0.5,minterpolate=fps=30:mi_mode=blend');
 });
 
 test('standard buildClipFfmpegArgs is byte-identical for a fixture clip (regression guard)', () => {
