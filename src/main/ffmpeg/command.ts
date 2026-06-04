@@ -29,19 +29,6 @@ function brightnessFilter(brightness: number | undefined): string {
   return `,eq=brightness=${fmt(brightness)}`;
 }
 
-// Slow-mo smoothing. `setpts` only stretches time (it holds each source frame
-// longer), so 0.5× on a 30fps source shows ~15 motion updates/sec — visibly
-// jerky. `minterpolate` synthesises motion-compensated in-between frames back
-// up to the SOURCE frame rate, making slow-mo as fluid as normal-speed footage.
-// Targeting source fps (not a fixed 60) keeps every exported part at one frame
-// rate so the sequence concat stays valid and the file size stays modest. Only
-// applied for slow-mo (speed < 1); returns '' otherwise. Must be appended AFTER
-// setpts so it interpolates the already-slowed stream.
-function slowmoInterpolate(speed: number, fps: number): string {
-  if (speed >= 1) return '';
-  return `,minterpolate=fps=${fmt(fps)}:mi_mode=mci:mc_mode=aobmc:vsbmc=1:scd=none`;
-}
-
 // Output (playback) duration of a clip in seconds. Source segment is
 // (out - in) seconds; slow-mo at 0.5× doubles that. The audio chain has to
 // match this number so fadeouts and atrims land on the same beat as the
@@ -486,7 +473,7 @@ export function buildClipFfmpegArgs(
   // Watermark is placed AFTER markers so it sits on top of any focus marker
   // that happens to overlap the top-left corner — branding stays visible.
   const watermark = watermarkFilter(source);
-  const videoFilter = `[0:v]crop=${fmt(width)}:${fmt(height)}:${fmt(x)}:${fmt(y)},scale=${source.width}:${source.height}${markerFilters ? ',' + markerFilters : ''},${watermark}${brightnessFilter(clip.brightness)},setpts=${setpts}${slowmoInterpolate(clip.speed, source.fps)}[v]`;
+  const videoFilter = `[0:v]crop=${fmt(width)}:${fmt(height)}:${fmt(x)}:${fmt(y)},scale=${source.width}:${source.height}${markerFilters ? ',' + markerFilters : ''},${watermark}${brightnessFilter(clip.brightness)},setpts=${setpts}[v]`;
 
   const head = ['-y', '-ss', fmt(clip.in), '-to', fmt(clip.out), '-i', source.path];
   const hasBacking = !!clip.backingTrack && clip.backingTrack.path.length > 0;
@@ -568,7 +555,7 @@ export function buildInstagramClipFfmpegArgs(
     + `,pad=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}:0:${fmt(padY)}:color=black`
     + `,${igWatermark}`
     + brightnessFilter(clip.brightness)
-    + `,setpts=${setpts}${slowmoInterpolate(clip.speed, source.fps)}[v]`;
+    + `,setpts=${setpts}[v]`;
 
   const head = ['-y', '-ss', fmt(clip.in), '-to', fmt(clip.out), '-i', source.path];
   const hasBacking = !!clip.backingTrack && clip.backingTrack.path.length > 0;
