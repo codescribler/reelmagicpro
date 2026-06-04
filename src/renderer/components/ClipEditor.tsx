@@ -19,6 +19,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
   const project = useProjectStore(s => s.project);
   const update = useProjectStore(s => s.updateClip);
   const setMode = useProjectStore(s => s.setPreviewMode);
+  const setReelFraming = useProjectStore(s => s.setReelFraming);
 
   const trackRef = useRef<HTMLElement>(null);
   const zoomRef = useRef<HTMLElement>(null);
@@ -45,6 +46,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
   const zoomDone = !isFullFrame;
   const slowmoDone = clip.speed < 1;
   const soundDone = !!clip.backingTrack;
+  const reelFramed = !!clip.reelFraming && clip.reelFraming.panPath.length > 0;
 
   const stepRefs: Record<StepKey, React.RefObject<HTMLElement>> = {
     track: trackRef, zoom: zoomRef, slowmo: slowmoRef, sound: soundRef,
@@ -90,6 +92,23 @@ export function ClipEditor({ clipId }: { clipId: string }) {
             onClick={() => update(clipId, { zoom: { x: 0, y: 0, width: sw, height: sh } })}
             title="Show the full source frame again">
             Reset focus box
+          </button>
+        </div>
+        <p className="step-hint" style={{ marginTop: 12 }}>
+          Frame the reel: drag the 9:16 box left/right through the clip to choose
+          what stays in the vertical crop. Black bars fill the top and bottom.
+        </p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setMode({ kind: 'frame-reel', clipId })}
+            title="Drag the reel-shaped box left/right to set the reel framing">
+            {reelFramed ? 'Re-frame reel' : 'Frame reel'}
+          </button>
+          <button
+            disabled={!reelFramed}
+            onClick={() => setReelFraming(clipId, undefined)}
+            title="Reset the reel to a static centred crop">
+            Clear reel framing
           </button>
         </div>
       </section>
