@@ -1,0 +1,23 @@
+.main:has(.music-alignment) { grid-template-rows: 30px minmax(100px, 1fr) auto; }
+.music-alignment { padding: 8px 12px; background: var(--panel); border-top: 1px solid var(--border); max-height: 300px; overflow: auto; }
+.music-alignment-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.music-alignment-controls button { font-size: 11px; padding: 4px 7px; }
+.music-alignment-controls audio { height: 30px; width: 230px; }
+.music-alignment-controls input { width: 54px; }
+.music-filename { color: var(--muted); max-width: 160px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.music-marker-label { color: #ffcb6b; font-variant-numeric: tabular-nums; font-size: 11px; }
+.music-video-ruler { display: flex; position: relative; height: 22px; margin-top: 8px; background: var(--panel-2); overflow: hidden; }
+.music-video-ruler span { padding: 3px 6px; border-right: 1px solid var(--border); overflow: hidden; white-space: nowrap; font-size: 10px; }
+.music-video-ruler i, .music-video-ruler b { position: absolute; width: 2px; height: 100%; background: #ffcb6b; }
+.music-video-ruler b { background: white; pointer-events: none; }
+.music-waveform-wrap { position: relative; }
+.moment-marker { position: absolute; top: 0; bottom: 0; z-index: 2; width: 16px; min-width: 0; padding: 0; border: 0; border-radius: 3px; transform: translateX(-50%); background: transparent; cursor: pointer; }
+.moment-marker::after { content: ''; position: absolute; top: 0; bottom: 0; left: 6px; width: 3px; background: #ffcb6b; }
+.moment-marker:hover, .moment-marker:focus { background: rgba(255, 203, 107, 0.25); }
+.moment-marker:focus { outline: 2px solid #ffcb6b; outline-offset: -2px; }
+.moment-marker:focus::after { background: white; }
+.music-waveform { display: block; width: 100%; height: 40px; color: var(--accent); cursor: crosshair; background: var(--bg); }
+.music-time-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
+.music-alignment details { margin: 3px 0 6px; }
+.music-alignment summary { cursor: pointer; color: var(--muted); font-size: 11px; }
+.music-alignment .dim { font-size: 11px; margin-top: 5px; }

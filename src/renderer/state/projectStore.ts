@@ -118,10 +118,11 @@ interface State {
   cancelMarking: () => void;
 
   activeRun: { runId: string; phase: ExportProgress['phase']; percent: number; currentItem: number; totalItems: number } | null;
-  exportResult: { ok: boolean; outputPath?: string; error?: string } | null;
+  exportLabel: string | null;
+  exportResult: { ok: boolean; outputPath?: string; outputPaths?: string[]; error?: string } | null;
   startRun: (runId: string) => void;
   setProgress: (p: ExportProgress) => void;
-  setExportResult: (r: { ok: boolean; outputPath?: string; error?: string } | null) => void;
+  setExportResult: (r: { ok: boolean; outputPath?: string; outputPaths?: string[]; error?: string } | null) => void;
   clearRun: () => void;
 }
 
@@ -675,6 +676,7 @@ export const useProjectStore = create<State>((set, get) => ({
   cancelMarking: () => set({ marking: null }),
 
   activeRun: null,
+  exportLabel: null,
   exportResult: null,
   startRun: (runId) => set({ activeRun: { runId, phase: 'rendering-part', percent: 0, currentItem: 1, totalItems: 1 }, exportResult: null }),
   setProgress: (p) => set(state => state.activeRun && state.activeRun.runId === p.runId

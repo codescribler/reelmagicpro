@@ -1,7 +1,10 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { mediaFileUrl, musicGain } from '../../shared/musicTiming';
 import { useProjectStore } from '../state/projectStore';
 import { previewClock } from '../state/previewClock';
+import { useSettings } from '../state/settings';
 import { markerCentreAt } from '../state/markerPosition';
+import { markerForDisplay } from '../../shared/pitchMarker';
 import { clampPlayhead, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
@@ -12,6 +15,7 @@ import { resolveSource, resolveSourceForClip } from '../../shared/resolveSource'
 export function Preview() {
   const project = useProjectStore(s => s.project);
   const previewMode = useProjectStore(s => s.previewMode);
+  const trackingRate = useSettings(s => s.trackingPlaybackRate);
   const setPreviewMode = useProjectStore(s => s.setPreviewMode);
   const activeSourceId = useProjectStore(s => s.activeSourceId);
   const setActiveSourceId = useProjectStore(s => s.setActiveSourceId);
@@ -96,17 +100,21 @@ export function Preview() {
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (!activeClip) {
-      v.playbackRate = 1; v.muted = false; return;
-    }
-    v.playbackRate = activeClip.speed;
-    // Mute the source video audio when (a) we're slow-mo (no usable audio
-    // anyway) or (b) the active backing track is configured to hide source.
-    // Otherwise leave source audible so it sits underneath the music.
-    const slowmoMutes = activeClip.speed !== 1;
-    const bgMutes = !!activeBackingTrack && activeBackingTrack.muteSource;
-    v.muted = slowmoMutes || bgMutes;
-  }, [activeClip?.speed, activeClip?.id, seqIndex, activeBackingTrack?.muteSource, activeBackingTrack?.path]);
+    // One owner for playback speed: overlay mount effects must not compete
+    // with clip playback or backing-track changes when entering tracking.
+    const apply = () => {
+      const tracking = previewMode.kind === 'track-marker' || previewMode.kind === 'frame-reel';
+      v.playbackRate = tracking ? trackingRate : (activeClip?.speed ?? 1);
+      v.muted = tracking || (!!activeClip && (activeClip.speed !== 1 || !!activeBackingTrack?.muteSource));
+    };
+    apply();
+    v.addEventListener('loadedmetadata', apply);
+    v.addEventListener('play', apply);
+    return () => {
+      v.removeEventListener('loadedmetadata', apply);
+      v.removeEventListener('play', apply);
+    };
+  }, [previewMode.kind, trackingRate, activeClip?.speed, activeClip?.id, activeSourceId, seqIndex, activeBackingTrack?.muteSource]);
 
   // Seek to clip in-point when entering a new clip OR new sequence index
   // (even if it's the same clip id as the previous sequence entry).
@@ -144,18 +152,27 @@ export function Preview() {
       cancelled = true;
       v.removeEventListener('loadedmetadata', apply);
     };
-  }, [activeClip?.id, previewMode.kind, seqIndex, activeSourceId, project, setActiveSourceId]);
+  }, [activeClip?.id, activeClip?.in, activeClip?.sourceId, previewMode.kind, seqIndex, activeSourceId, setActiveSourceId]);
 
   // Replay: rewind to clip.in and play. Triggered by the Replay button in the
   // clip editor incrementing replayToken.
   const replayToken = useProjectStore(s => s.replayToken);
+  const consumedReplay = useRef(0);
   useEffect(() => {
-    if (replayToken === 0) return;
+    if (replayToken === 0 || replayToken === consumedReplay.current) return;
     const v = videoRef.current;
     if (!v || !activeClip) return;
-    v.currentTime = activeClip.in;
-    v.play().catch(() => {});
-  }, [replayToken]);
+    const source = project && resolveSourceForClip(project, activeClip);
+    if (source && source.id !== activeSourceId) return;
+    const play = () => {
+      consumedReplay.current = replayToken;
+      v.currentTime = activeClip.in;
+      v.play().catch(() => {});
+    };
+    if (v.readyState >= 1) play();
+    else v.addEventListener('loadedmetadata', play, { once: true });
+    return () => v.removeEventListener('loadedmetadata', play);
+  }, [replayToken, activeSourceId, activeClip?.id]);
 
   // Bookmark seek: when the user clicks a bookmark, the store flips into
   // source mode and bumps seekRequest.token. Jump the video to the requested
@@ -285,15 +302,15 @@ export function Preview() {
     const a = audioRef.current;
     if (!a) return;
     if (audioActive && activeBackingTrack) {
-      const url = `file://${activeBackingTrack.path}`;
+      const url = mediaFileUrl(activeBackingTrack.path);
       if (a.src !== url) a.src = url;
-      a.volume = Math.max(0, Math.min(1, activeBackingTrack.volume));
+      a.volume = 0; // The timing loop applies the envelope when metadata is ready.
     } else {
       a.pause();
       a.removeAttribute('src');
       a.load();
     }
-  }, [audioActive, activeBackingTrack?.path, activeBackingTrack?.volume]);
+  }, [audioActive, activeBackingTrack?.path]);
 
   // Refs to the latest project / preview-mode / activeClip so the sync effect
   // below can read current values without having to tear down + rebuild on
@@ -305,6 +322,8 @@ export function Preview() {
   projectRef.current = project;
   previewModeRef.current = previewMode;
   activeClipRef.current = activeClip;
+  const backingTrackRef = useRef(activeBackingTrack);
+  backingTrackRef.current = activeBackingTrack;
 
   // Mirror the video's play / pause / seek into the backing-track audio.
   // The audio always plays at 1× wall-clock; the video plays at clip.speed.
@@ -334,31 +353,52 @@ export function Preview() {
       elapsed += Math.max(0, (v.currentTime - ac.in) / ac.speed);
       return elapsed;
     }
-    function syncAudioTime() {
-      if (!a) return;
-      const target = computeAudioTime();
+    let previousOffset: number | undefined;
+    function syncAudioTime(force = false) {
+      const track = backingTrackRef.current;
+      if (!a || !v || !track || !Number.isFinite(a.duration)) return;
+      const elapsed = computeAudioTime();
+      const target = elapsed - (track.offsetSec ?? 0);
+      const offsetChanged = previousOffset !== (track.offsetSec ?? 0);
+      previousOffset = track.offsetSec ?? 0;
+      const proj = projectRef.current;
+      const ac = activeClipRef.current;
+      const duration = previewModeRef.current.kind === 'sequence' && proj
+        ? proj.sequence.reduce((sum, entry) => {
+          const c = proj.clips.find(cl => cl.id === entry.clipId);
+          return sum + (c ? (c.out - c.in) / c.speed : 0);
+        }, 0)
+        : ac ? (ac.out - ac.in) / ac.speed : 0;
+      a.volume = musicGain({ ...track, durationSec: a.duration }, elapsed, duration);
+      if (target < 0 || target >= a.duration || elapsed >= duration) {
+        a.pause();
+        return;
+      }
       // Only correct meaningful drift — assigning currentTime every frame
       // produces audible clicks in Chromium.
-      if (Math.abs(a.currentTime - target) > 0.15) {
+      if (force || offsetChanged || Math.abs(a.currentTime - target) > 0.15) {
         a.currentTime = target;
       }
+      if (!v.paused && !v.seeking && a.paused) a.play().catch(() => {});
     }
     function onPlay() {
       if (!a) return;
-      syncAudioTime();
-      a.play().catch(() => {});
+      syncAudioTime(true);
     }
     function onPause() { a?.pause(); }
-    function onSeeked() { syncAudioTime(); }
+    function onSeeked() { syncAudioTime(true); }
 
     v.addEventListener('play', onPlay);
     v.addEventListener('pause', onPause);
     v.addEventListener('seeked', onSeeked);
+    a.addEventListener('loadedmetadata', onSeeked);
+    let frame = 0;
+    const tick = () => { syncAudioTime(); frame = requestAnimationFrame(tick); };
+    frame = requestAnimationFrame(tick);
     // If the video happens to already be playing when audio activates, kick
     // off audio immediately rather than waiting for the next play event.
     if (!v.paused) {
       syncAudioTime();
-      a.play().catch(() => {});
     } else {
       syncAudioTime();
     }
@@ -366,9 +406,11 @@ export function Preview() {
       v.removeEventListener('play', onPlay);
       v.removeEventListener('pause', onPause);
       v.removeEventListener('seeked', onSeeked);
+      a.removeEventListener('loadedmetadata', onSeeked);
+      cancelAnimationFrame(frame);
       a.pause();
     };
-  }, [audioActive]);
+  }, [audioActive, activeBackingTrack?.path]);
 
   if (!project || !previewSource) return <span className="dim">Open a video to begin</span>;
 
@@ -434,6 +476,7 @@ export function Preview() {
       }}>
         <video
           ref={videoRef}
+          onPlay={() => window.dispatchEvent(new Event('reelmagic:video-play'))}
           src={`file://${previewSource.path}`}
           style={{
             position: 'absolute', top: 0, left: 0,
@@ -458,18 +501,20 @@ export function Preview() {
             transform: zoomTransform,
             pointerEvents: 'none',
           }}>
-            {visibleMarkers.map(m => {
+            {visibleMarkers.map(markerForDisplay).map(m => {
               const { cx, cy } = markerCentreAt(m, clipRelT);
               const left = (cx - m.width / 2) * fit;
               const top = (cy - m.height / 2) * fit;
               const w = m.width * fit;
               const h = m.height * fit;
-              const isOval = m.shape === 'oval';
+              const isOval = m.shape === 'oval' || m.shape === 'pitch';
               const outlineStyle: React.CSSProperties = isOval
                 ? {
                   position: 'absolute',
                   left, top, width: w, height: h,
-                  border: `3px solid ${m.color}`,
+                  border: m.shape === 'pitch' ? 'none' : `3px solid ${m.color}`,
+                  background: m.shape === 'pitch' ? `radial-gradient(ellipse closest-side, ${m.color} 65%, transparent 100%)` : undefined,
+                  opacity: m.shape === 'pitch' ? (m.pitchOpacity ?? 0.15) : 1,
                   borderRadius: '50%',
                   boxSizing: 'border-box',
                 }

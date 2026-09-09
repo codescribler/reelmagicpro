@@ -38,7 +38,11 @@ export interface FocusMarker {
   color: string;   // ffmpeg/CSS colour name, e.g. 'yellow'
   // Outline shape. Defaults to 'rect' when undefined for back-compat with
   // projects saved before ovals existed.
-  shape?: 'rect' | 'oval';
+  shape?: 'rect' | 'oval' | 'pitch';
+  pitchOffsetX?: number; // source pixels, relative to estimated feet
+  pitchOffsetY?: number;
+  pitchOpacity?: number; // shaded pitch marker opacity, 0–1 (default 0.15)
+  smoothing?: number; // additional smoothing window in seconds (0 = off)
   label?: string;  // optional caption rendered under the box (preview + export)
   // Optional motion track. When present, the marker's centre is interpolated
   // along this path; x/y above are ignored. The list is sorted by t ascending.
@@ -75,6 +79,12 @@ export interface BackingTrack {
   path: string;
   volume: number;
   muteSource: boolean;
+  /** Music starts at this output time; negative values trim the song's start. */
+  offsetSec?: number;
+  videoMomentSec?: number;
+  musicMomentSec?: number;
+  fadeInSec?: number;
+  durationSec?: number;
 }
 
 export interface Clip {

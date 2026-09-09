@@ -4,6 +4,7 @@ import { useProjectStore } from '../state/projectStore';
 export function ExportProgressModal() {
   const run = useProjectStore(s => s.activeRun);
   const result = useProjectStore(s => s.exportResult);
+  const label = useProjectStore(s => s.exportLabel);
   const clear = useProjectStore(s => s.clearRun);
 
   async function cancel() {
@@ -34,11 +35,15 @@ export function ExportProgressModal() {
         </div>
         {run && !result && (
           <div className="dim" style={{ marginBottom: 8 }}>
+            {label && <div>{label}</div>}
             {run.phase === 'concatenating' ? 'Concatenating…' : `Item ${run.currentItem} of ${run.totalItems}`}
             {' '}— {Math.round(run.percent)}%
           </div>
         )}
         {result?.ok && <div className="dim" style={{ marginBottom: 8 }}>{result.outputPath}</div>}
+        {result?.outputPaths?.map(file => <div key={file} className="dim" style={{ marginBottom: 8 }}>
+          {!result.ok && 'Saved: '}{file}
+        </div>)}
         {result?.ok === false && <div className="dim" style={{ marginBottom: 8, color: isCancelled ? 'var(--muted)' : 'var(--danger)' }}>{result.error}</div>}
         <div style={{ height: 6, background: 'var(--panel-2)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
           <div style={{

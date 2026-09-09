@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import type { Clip, FocusMarker } from '../../shared/types';
 import { resolveSourceForClip } from '../../shared/resolveSource';
+import { MarkerAdjustments } from './MarkerAdjustments';
 
 const MARKER_COLORS = ['yellow', 'red', 'lime', 'cyan', 'magenta', 'orange', 'white'];
 
@@ -58,8 +59,9 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
       height: h,
       in: clip.in,
       out: clip.out,
-      color: MARKER_COLORS[clip.focusMarkers.length % MARKER_COLORS.length] || 'yellow',
-      shape: 'rect',
+      color: 'white',
+      shape: 'pitch',
+      pitchOpacity: 0.15,
     };
     addMarker(clip.id, m);
     setMode({ kind: 'track-marker', clipId: clip.id, markerId: m.id });
@@ -185,7 +187,7 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, showPrimaryStar, i
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <span style={{
           width: 12, height: 12,
-          borderRadius: shape === 'oval' ? '50%' : 2,
+          borderRadius: shape !== 'rect' ? '50%' : 2,
           background: marker.color,
           border: '1px solid var(--border)',
           flex: '0 0 auto',
@@ -227,8 +229,8 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, showPrimaryStar, i
           className={hasPath ? '' : 'primary'}
           onClick={onTrack}
           title={hasPath
-            ? 'Re-record the path: video plays at 0.5× and the tag follows your mouse'
-            : 'Play at 0.5× and follow the player with your mouse to record their path'}>
+            ? 'Re-record the path at the tracking speed chosen in Settings'
+            : 'Follow the player with your mouse at the tracking speed chosen in Settings'}>
           {hasPath ? `Re-record path (${marker.path!.length} pts)` : 'Follow with mouse'}
         </button>
         <button
@@ -244,10 +246,12 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, showPrimaryStar, i
             <span className="dim" style={{ fontSize: 11 }}>Shape</span>
             <select
               value={shape}
-              onChange={e => onUpdate({ shape: e.target.value as 'rect' | 'oval' })}
+              aria-label="Marker shape"
+              onChange={e => onUpdate({ shape: e.target.value as FocusMarker['shape'] })}
               style={{ background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 3, fontSize: 11 }}>
               <option value="rect">Rect</option>
               <option value="oval">Oval</option>
+              <option value="pitch">Pitch marker</option>
             </select>
             <span className="dim" style={{ fontSize: 11, marginLeft: 6 }}>Colour</span>
             <select
@@ -260,6 +264,7 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, showPrimaryStar, i
             <button onClick={() => resize(1 / SIZE_STEP)} title="Shrink tag">−</button>
             <button onClick={() => resize(SIZE_STEP)} title="Enlarge tag">+</button>
           </div>
+          <MarkerAdjustments marker={marker} onUpdate={onUpdate} />
           <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>
             Active from {fmtTime(marker.in)} to {fmtTime(marker.out)} — drag the handles to limit when the tag is shown.
           </div>

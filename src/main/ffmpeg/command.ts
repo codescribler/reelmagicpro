@@ -1,4 +1,6 @@
 import path from 'path';
+import { musicFilter } from './musicFilter';
+import { markerForDisplay } from '../../shared/pitchMarker';
 import type { Clip, SourceMeta, FocusMarker, BackingTrack } from '../../shared/types';
 import type { ReelFramingSample } from '../../shared/instagramFraming';
 import { reelCropSide } from '../../shared/instagramFraming';
@@ -59,6 +61,13 @@ function buildBackingAudio(clip: Clip, bgInputIndex: number): {
 } {
   const bg = clip.backingTrack!;
   const dur = clipOutputDurationSec(clip);
+  if (bg.offsetSec !== undefined || bg.fadeInSec !== undefined || bg.durationSec !== undefined) {
+    const music = `[${bgInputIndex}:a]${musicFilter(bg, dur)}`;
+    const filter = !bg.muteSource && clip.speed === 1
+      ? `${music}[bg];[0:a][bg]amix=inputs=2:duration=first:normalize=0,atrim=duration=${fmt(dur)}[aout]`
+      : `${music}[aout]`;
+    return { inputs: ['-i', bg.path], filter, audioMap: '[aout]' };
+  }
   const fade = Math.min(AUDIO_FADE_OUT_SEC, Math.max(0, dur / 2));
   const fadeStart = Math.max(0, dur - fade);
   const trimTail = `,atrim=duration=${fmt(dur)},asetpts=PTS-STARTPTS`;
@@ -219,6 +228,7 @@ function ovalGeq(
   rx: number, ry: number, thick: number,
   color: { r: number; g: number; b: number },
   enable: string,
+  opacity?: number,
 ): string {
   const rxIn = Math.max(1, rx - thick);
   const ryIn = Math.max(1, ry - thick);
@@ -226,6 +236,15 @@ function ovalGeq(
   const dy = `(Y-${fmt(cy)})`;
   const rx2 = fmt(rx * rx);
   const ry2 = fmt(ry * ry);
+  if (opacity !== undefined) {
+    // Match the preview's solid centre and feathered outer 35%. Blend with
+    // the footage rather than replacing it, leaving the player visible.
+    const radius = `sqrt(${dx}*${dx}/${rx2}+${dy}*${dy}/${ry2})`;
+    const alpha = `${fmt(opacity)}*clip((1-${radius})/0.35\\,0\\,1)`;
+    const blend = (channel: string, value: number) =>
+      `${channel}(X\\,Y)+(${value}-${channel}(X\\,Y))*(${alpha})`;
+    return `geq=r='${blend('r', color.r)}':g='${blend('g', color.g)}':b='${blend('b', color.b)}':${enable}`;
+  }
   const rxIn2 = fmt(rxIn * rxIn);
   const ryIn2 = fmt(ryIn * ryIn);
   const outer = `lte(${dx}*${dx}/${rx2}+${dy}*${dy}/${ry2}\\,1)`;
@@ -263,14 +282,16 @@ function buildMarkerFilters(clip: Clip, source: SourceMeta): string {
   // so when any oval is present we run the whole marker chain in rgba and
   // convert back to yuv420p afterwards. This keeps colours consistent across
   // shapes without paying the format conversion cost when there are no ovals.
-  const hasOval = clip.focusMarkers.some(m => (m.shape ?? 'rect') === 'oval');
+  const markers = clip.focusMarkers.map(markerForDisplay);
+  const hasOval = markers.some(m => m.shape === 'oval' || m.shape === 'pitch');
 
-  const perMarker = clip.focusMarkers.map((m: FocusMarker) => {
+  const perMarker = markers.map((m: FocusMarker) => {
     const pw = m.width * scaleX;
     const ph = m.height * scaleY;
     const relIn = Math.max(0, m.in - clip.in);
     const relOut = Math.max(relIn, m.out - clip.in);
-    const isOval = (m.shape ?? 'rect') === 'oval';
+    const isOval = m.shape === 'oval' || m.shape === 'pitch';
+    const opacity = m.shape === 'pitch' ? (m.pitchOpacity ?? 0.15) : undefined;
 
     if (m.path && m.path.length > 0) {
       const enable = `enable='between(t\\,${fmt(relIn)}\\,${fmt(relOut)})'`;
@@ -293,11 +314,13 @@ function buildMarkerFilters(clip: Clip, source: SourceMeta): string {
         const rawEnd = i + 1 < stampPath.length ? stampPath[i + 1]!.t : relOut;
         const segEnd = Math.min(relOut, rawEnd);
         if (segEnd <= segStart) continue;
-        const segEnable = `enable='between(t\\,${fmt(segStart)}\\,${fmt(segEnd)})'`;
+        const segEnable = m.shape === 'pitch'
+          ? `enable='gte(t\\,${fmt(segStart)})*${i === stampPath.length - 1 ? 'lte' : 'lt'}(t\\,${fmt(segEnd)})'`
+          : `enable='between(t\\,${fmt(segStart)}\\,${fmt(segEnd)})'`;
         if (isOval) {
           const cx = (p.cx - z.x) * scaleX;
           const cy = (p.cy - z.y) * scaleY;
-          stamps.push(ovalGeq(cx, cy, pw / 2, ph / 2, OVAL_THICKNESS, colorRgb(m.color), segEnable));
+          stamps.push(ovalGeq(cx, cy, pw / 2, ph / 2, OVAL_THICKNESS, colorRgb(m.color), segEnable, opacity));
         } else {
           const x = (p.cx - z.x) * scaleX - pw / 2;
           const y = (p.cy - z.y) * scaleY - ph / 2;
@@ -323,7 +346,7 @@ function buildMarkerFilters(clip: Clip, source: SourceMeta): string {
     if (isOval) {
       const cx = xVal + pw / 2;
       const cy = yVal + ph / 2;
-      result = ovalGeq(cx, cy, pw / 2, ph / 2, OVAL_THICKNESS, colorRgb(m.color), enable);
+      result = ovalGeq(cx, cy, pw / 2, ph / 2, OVAL_THICKNESS, colorRgb(m.color), enable, opacity);
     } else {
       result = boxStamp(m.color, xVal, yVal, pw, ph, enable);
     }

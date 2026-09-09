@@ -47,17 +47,13 @@ export function ReelFrameOverlay({
   const boxDisplayH = (cropSide / sourceHeight) * displayHeight; // = displayHeight for landscape
   const halfSrc = cropSide / 2;
 
-  // Seek to clip.in once, slow to the tracking rate, paused & muted. Restore
-  // clip speed on exit.
+  // Seek and pause on mount. Preview owns playback speed and muting.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     v.pause();
     v.currentTime = clip.in;
-    v.playbackRate = useSettings.getState().trackingPlaybackRate;
-    v.muted = true;
     return () => {
-      v.playbackRate = clip.speed;
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
@@ -72,6 +68,7 @@ export function ReelFrameOverlay({
       return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
     }
     function onKey(e: KeyboardEvent) {
+      if ((e.target as Element | null)?.closest('[data-moment-marker]')) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTyping()) return;
       if (e.code === 'ArrowLeft' && !e.shiftKey) { e.preventDefault(); nudge(-skipSeconds); return; }

@@ -23,9 +23,10 @@ declare global {
       exportSequence: (args: ExportSequenceArgs) => Promise<ExportResult>;
       cancelExport: (runId: string) => Promise<{ ok: boolean }>;
       checkPath: (p: string) => Promise<{ exists: boolean }>;
-      chooseExportPath: (suggestedName: string) => Promise<{ ok: boolean; path?: string }>;
+      chooseExportPath: (suggestedName: string, both?: boolean) => Promise<{ ok: boolean; path?: string }>;
       chooseOutroFile: () => Promise<{ ok: boolean; path?: string }>;
       chooseBackingTrack: () => Promise<{ ok: boolean; path?: string }>;
+      readMusicAudio: (path: string) => Promise<{ bytes?: Uint8Array; error?: string }>;
       onExportProgress: (cb: (p: ExportProgress) => void) => () => void;
       downloadVeoVideo: (args: DownloadVeoVideoArgs) => Promise<VeoDownloadResult>;
       cancelVeoDownload: (runId: string) => Promise<{ ok: boolean }>;

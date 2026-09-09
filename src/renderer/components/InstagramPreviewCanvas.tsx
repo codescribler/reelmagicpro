@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Clip, SourceMeta, FocusMarker } from '../../shared/types';
 import { computeReelFraming, ReelFramingSample } from '../../shared/instagramFraming';
 import { markerCentreAt } from '../state/markerPosition';
+import { markerForDisplay } from '../../shared/pitchMarker';
 
 const DISPLAY_W = 270;
 const DISPLAY_H = 480;
@@ -144,7 +145,11 @@ function drawReelFrame(
   // Markers, mapped post-zoom → canvas (same scale as the slice).
   const scale = c.width / s.w;
   const t = v.currentTime - clip.in;
-  for (const m of clip.focusMarkers) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, dy, c.width, bandH);
+  ctx.clip();
+  for (const m of clip.focusMarkers.map(markerForDisplay)) {
     if (v.currentTime < m.in || v.currentTime > m.out) continue;
     const { cx: mx, cy: my } = markerCentreAt(m, t);
     const cxp = ((mx - z.x) * srcW) / z.width;
@@ -157,6 +162,7 @@ function drawReelFrame(
     const top = dy + (cyp - y0p) * scale - bh / 2;
     drawMarker(ctx, m, left, top, bw, bh);
   }
+  ctx.restore();
 
   drawWatermark(ctx, c.width, c.height);
   ctx.filter = 'none';
@@ -169,7 +175,21 @@ function drawMarker(
 ) {
   ctx.strokeStyle = m.color;
   ctx.fillStyle = m.color;
-  if ((m.shape ?? 'rect') === 'oval') {
+  if (m.shape === 'pitch') {
+    ctx.save();
+    ctx.translate(x + w / 2, y + h / 2);
+    ctx.scale(w / 2, h / 2);
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    gradient.addColorStop(0, m.color);
+    gradient.addColorStop(0.65, m.color);
+    gradient.addColorStop(1, 'transparent');
+    ctx.fillStyle = gradient;
+    ctx.globalAlpha = m.pitchOpacity ?? 0.15;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if ((m.shape ?? 'rect') === 'oval') {
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.ellipse(x + w / 2, y + h / 2, Math.max(1, w / 2), Math.max(1, h / 2), 0, 0, Math.PI * 2);

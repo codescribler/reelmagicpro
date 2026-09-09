@@ -1,4 +1,5 @@
 import type { SourceMeta, BackingTrack } from '../../shared/types';
+import { musicFilter } from './musicFilter';
 
 // Mirrors AUDIO_FADE_OUT_SEC in command.ts. Duplicated here rather than
 // exported across modules so the concat builder doesn't have to import from
@@ -110,6 +111,17 @@ export function buildFilterConcatFfmpegArgs(
         + `[mix]anull${trimTail}${fadeTail}[aout]`;
     }
     audioMap = '[aout]';
+    if (backingTrack.offsetSec !== undefined || backingTrack.fadeInSec !== undefined || backingTrack.durationSec !== undefined) {
+      const music = `[${N}:a]${musicFilter(backingTrack, dur)}`;
+      if (backingTrack.muteSource) {
+        let videoLabels = '';
+        for (let i = 0; i < N; i++) videoLabels += `[v${i}n]`;
+        filter = `${normalize}${videoLabels}concat=n=${N}:v=1:a=0[v];${music}[aout]`;
+      } else {
+        filter = `${normalize}${labels}concat=n=${N}:v=1:a=1[v][srcA];${music}[bg];`
+          + `[srcA][bg]amix=inputs=2:duration=first:normalize=0,atrim=duration=${fmt(dur)}[aout]`;
+      }
+    }
   } else {
     filter = `${normalize}${labels}concat=n=${partPaths.length}:v=1:a=1[v][a]`;
     audioMap = '[a]';

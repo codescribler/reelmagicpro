@@ -226,6 +226,7 @@ function SoundSection({ clip }: { clip: Clip }) {
     if (!r.ok || !r.path) return;
     const next: BackingTrack = {
       path: r.path,
+      fadeInSec: 1,
       volume: bg?.volume ?? DEFAULT_BACKING_VOLUME,
       muteSource: bg?.muteSource ?? true,
     };
@@ -290,7 +291,7 @@ function SoundSection({ clip }: { clip: Clip }) {
         </div>
       )}
       <div className="dim" style={{ fontSize: 11 }}>
-        The track fades out in the last half-second of the export.
+        Use the waveform below the video to align moments and adjust the fade.
       </div>
     </div>
   );

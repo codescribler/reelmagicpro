@@ -1,5 +1,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
 import fs from 'fs/promises';
+import { exportTargets } from '../shared/exportTargets';
 import { probeVideo } from './ffmpeg/probe';
 import { exportClip, exportSequence } from './ffmpeg/exporter';
 import { saveProject, loadProject } from './project/io';
@@ -151,6 +152,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return { ok: true, path: r.filePaths[0] };
   });
 
+  ipcMain.handle('app:readMusicAudio', async (_e, filePath: string) => {
+    try {
+      if (typeof filePath !== 'string' || !/\.(mp3|m4a|wav|aac|ogg)$/i.test(filePath)) {
+        return { error: 'Unsupported audio file.' };
+      }
+      const stat = await fs.stat(filePath);
+      if (!stat.isFile() || stat.size > 64 * 1024 * 1024) {
+        return { error: 'Waveform preview supports audio files up to 64 MB.' };
+      }
+      return { bytes: new Uint8Array(await fs.readFile(filePath)) };
+    } catch {
+      return { error: 'Could not read the audio file.' };
+    }
+  });
+
   ipcMain.handle('app:cancelExport', async (_e, runId: string) => {
     const entry = activeRuns.get(runId);
     if (entry) entry.ctrl.abort();
@@ -191,7 +207,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     catch { return { exists: false }; }
   });
 
-  ipcMain.handle('app:chooseExportPath', async (_e, suggestedName: string) => {
+  ipcMain.handle('app:chooseExportPath', async (_e, suggestedName: string, both?: boolean) => {
     const win = getWindow();
     if (!win) return { ok: false };
     const r = await dialog.showSaveDialog(win, {
@@ -199,6 +215,20 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
     });
     if (r.canceled || !r.filePath) return { ok: false };
+    if (both) {
+      const existing: string[] = [];
+      for (const target of exportTargets(r.filePath, 'both')) {
+        try { await fs.access(target.outputPath); existing.push(target.outputPath); }
+        catch (error: any) { if (error.code !== 'ENOENT') throw error; }
+      }
+      if (existing.length) {
+        const answer = await dialog.showMessageBox(win, {
+          type: 'warning', message: 'Replace existing exports?', detail: existing.join('\n'),
+          buttons: ['Cancel', 'Replace'], defaultId: 0, cancelId: 0,
+        });
+        if (answer.response !== 1) return { ok: false };
+      }
+    }
     return { ok: true, path: r.filePath };
   });
 }

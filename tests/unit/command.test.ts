@@ -16,6 +16,17 @@ const baseClip: Clip = {
   focusMarkers: [],
 };
 
+test.each([undefined, 0, 0.2, 1])('pitch shading blends footage with opacity %s', pitchOpacity => {
+  const args = buildClipFfmpegArgs({ ...baseClip, focusMarkers: [{
+    id: 'pitch', x: 100, y: 200, width: 100, height: 160,
+    in: 10, out: 20, color: 'cyan', shape: 'pitch', pitchOpacity,
+  }] }, source, '/out.mp4');
+  const filter = args[args.indexOf('-filter_complex') + 1]!;
+  expect(filter).toContain(`${pitchOpacity ?? 0.15}*clip(`);
+  expect(filter).toContain('sqrt(');
+  expect(filter).toContain("geq=r='r(X\\,Y)+(0-r(X\\,Y))*");
+});
+
 // Mirrors the watermark string the implementation appends to every clip's
 // filter chain. Uses the bundled brand font shared with marker labels.
 function expectedWatermark(s: SourceMeta): string {

@@ -46,6 +46,7 @@ export function SequenceMusicButton() {
     if (!r.ok || !r.path) return;
     const next: BackingTrack = {
       path: r.path,
+      fadeInSec: 1,
       volume: bg?.volume ?? DEFAULT_VOLUME,
       muteSource: bg?.muteSource ?? true,
     };
@@ -107,7 +108,7 @@ export function SequenceMusicButton() {
           </label>
           <div className="dim" style={{ fontSize: 11 }}>
             Plays across all clips. Per-clip music is ignored when a sequence
-            track is set. Fades out in the last half-second of the export.
+            track is set. Use the waveform below the video to align moments and adjust the fade.
           </div>
         </div>
       )}

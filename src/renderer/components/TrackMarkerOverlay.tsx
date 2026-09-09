@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Clip, FocusMarkerPathPoint } from '../../shared/types';
+import { markerForDisplay } from '../../shared/pitchMarker';
 import { useProjectStore } from '../state/projectStore';
 import { useSettings } from '../state/settings';
 import { smoothPath, decimatePath } from '../state/markerPosition';
@@ -47,23 +48,24 @@ export function TrackMarkerOverlay({
 
   // Width/height of the preview marker box at current display scale, so the
   // user sees the same outline they'll get during playback.
-  const dispW = clip.focusMarkers.find(m => m.id === markerId)?.width ?? 100;
-  const dispH = clip.focusMarkers.find(m => m.id === markerId)?.height ?? 100;
+  const marker = clip.focusMarkers.find(m => m.id === markerId);
+  const displayMarker = marker && markerForDisplay({ ...marker, path: undefined });
+  const dispW = displayMarker?.width ?? 100;
+  const dispH = displayMarker?.height ?? 100;
+  const groundOffset = marker?.shape === 'pitch'
+    ? (marker.height / 2 + (marker.pitchOffsetY ?? 0)) / sourceHeight * displayHeight : 0;
+  const horizontalOffset = marker?.shape === 'pitch'
+    ? (marker.pitchOffsetX ?? 0) / sourceWidth * displayWidth : 0;
   const boxDisplayW = (dispW / sourceWidth) * displayWidth;
   const boxDisplayH = (dispH / sourceHeight) * displayHeight;
 
-  // Seek the video to clip.in once on mount, slow playback to the configured
-  // tracking rate (default 0.5×; lower for fast action), paused. On exit,
-  // restore the clip's normal speed.
+  // Seek and pause on mount. Preview owns playback speed and muting.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     v.pause();
     v.currentTime = clip.in;
-    v.playbackRate = useSettings.getState().trackingPlaybackRate;
-    v.muted = true;
     return () => {
-      v.playbackRate = clip.speed;
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
@@ -82,6 +84,7 @@ export function TrackMarkerOverlay({
       return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
     }
     function onKey(e: KeyboardEvent) {
+      if ((e.target as Element | null)?.closest('[data-moment-marker]')) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTyping()) return;
       if (e.code === 'ArrowLeft' && !e.shiftKey) {
@@ -277,11 +280,14 @@ export function TrackMarkerOverlay({
       {previewPos && (
         <div style={{
           position: 'absolute',
-          left: previewPos.x - boxDisplayW / 2,
-          top: previewPos.y - boxDisplayH / 2,
+          left: previewPos.x + horizontalOffset - boxDisplayW / 2,
+          top: previewPos.y + groundOffset - boxDisplayH / 2,
           width: boxDisplayW,
           height: boxDisplayH,
-          border: '3px dashed yellow',
+          border: marker?.shape === 'pitch' ? 'none' : `3px dashed ${marker?.color ?? 'yellow'}`,
+          background: marker?.shape === 'pitch' ? `radial-gradient(ellipse closest-side, ${marker.color} 65%, transparent 100%)` : undefined,
+          opacity: marker?.shape === 'pitch' ? (marker.pitchOpacity ?? 0.15) : 1,
+          borderRadius: displayMarker?.shape === 'oval' || marker?.shape === 'pitch' ? '50%' : 0,
           boxSizing: 'border-box',
           pointerEvents: 'none',
         }} />

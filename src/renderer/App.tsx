@@ -1,9 +1,11 @@
+import { exportTargets } from '../shared/exportTargets';
 import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from './state/projectStore';
 import { useSettings } from './state/settings';
 import { previewClock } from './state/previewClock';
 import { keyToNudgeDelta } from './state/playhead';
 import { Preview } from './components/Preview';
+import { MusicAlignment } from './components/MusicAlignment';
 import { RightPanel } from './components/RightPanel';
 import { SourceTabs } from './components/SourceTabs';
 import { Sequence } from './components/Sequence';
@@ -76,6 +78,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
       return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
     }
     function onKey(e: KeyboardEvent) {
+      if ((e.target as Element | null)?.closest('[data-moment-marker]')) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (settingsOpenRef.current) return;
       if (isTyping()) return;
@@ -233,30 +236,36 @@ function Editor({ pastDue }: { pastDue: boolean }) {
     const ctx = exportOptions;
     setExportOptions(null);
     if (!ctx || !result.ok || !result.format || !project) return;
-    const format = result.format;
-    const runId = 'r_' + Math.random().toString(36).slice(2, 10);
-    if (ctx.kind === 'clip') {
-      const out = await window.reelmagic.chooseExportPath(`${ctx.clip.name}.mp4`);
-      if (!out.ok || !out.path) return;
+    const out = await window.reelmagic.chooseExportPath(
+      ctx.kind === 'clip' ? `${ctx.clip.name}.mp4` : 'sequence.mp4', result.format === 'both',
+    );
+    if (!out.ok || !out.path) return;
+    const completed: string[] = [];
+    const targets = exportTargets(out.path, result.format);
+    for (const [index, target] of targets.entries()) {
+      const runId = 'r_' + Math.random().toString(36).slice(2, 10);
       startRun(runId);
-      const r = await window.reelmagic.exportClip({
-        runId, clip: ctx.clip, source: ctx.source, outputPath: out.path, format,
-      });
-      setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
-    } else {
-      const out = await window.reelmagic.chooseExportPath(`sequence.mp4`);
-      if (!out.ok || !out.path) return;
-      startRun(runId);
-      const r = await window.reelmagic.exportSequence({
-        runId, clips: project.clips, sequence: project.sequence,
-        sources: project.sources, outputPath: out.path, format,
-        sequenceBackingTrack: project.sequenceBackingTrack,
-        sequenceBrightness: project.sequenceBrightness,
-      });
-      setExportResult(r.ok ? { ok: true, outputPath: r.outputPath } : { ok: false, error: r.error });
+      useProjectStore.setState({ exportLabel: targets.length > 1
+        ? `${target.format === 'standard' ? 'Standard' : 'Instagram'} (${index + 1} of ${targets.length})` : null });
+      try {
+        const r = ctx.kind === 'clip'
+          ? await window.reelmagic.exportClip({ runId, clip: ctx.clip, source: ctx.source, ...target })
+          : await window.reelmagic.exportSequence({
+            runId, clips: project.clips, sequence: project.sequence, sources: project.sources, ...target,
+            sequenceBackingTrack: project.sequenceBackingTrack, sequenceBrightness: project.sequenceBrightness,
+          });
+        if (!r.ok) {
+          setExportResult({ ok: false, error: r.error, outputPaths: completed });
+          return;
+        }
+        completed.push(r.outputPath ?? target.outputPath);
+      } catch (error) {
+        setExportResult({ ok: false, error: String(error), outputPaths: completed });
+        return;
+      }
     }
+    setExportResult({ ok: true, outputPaths: completed });
   }
-
   if (!project) {
     return (
       <>
@@ -321,6 +330,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         <div className="preview-wrap">
           <Preview />
         </div>
+        <MusicAlignment />
       </div>
       <div className="side" ref={sideRef}>
         <RightPanel onExport={runClipExport} />

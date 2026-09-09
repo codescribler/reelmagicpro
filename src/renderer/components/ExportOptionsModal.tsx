@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import type { ExportFormat, Clip, SourceMeta } from '../../shared/types';
 import { InstagramPreviewCanvas } from './InstagramPreviewCanvas';
+import type { ExportSelection } from '../../shared/exportTargets';
 
 export interface ExportOptionsResult {
   ok: boolean;
-  format?: ExportFormat;
+  format?: ExportSelection;
 }
 
 export type ExportOptionsContext =
@@ -22,7 +23,7 @@ export function ExportOptionsModal(props: {
   onResolve: (r: ExportOptionsResult) => void;
 }) {
   const { open, initialFormat = 'standard', context, onResolve } = props;
-  const [format, setFormat] = useState<ExportFormat>(initialFormat);
+  const [format, setFormat] = useState<ExportSelection>(initialFormat);
 
   useEffect(() => { if (open) setFormat(initialFormat); }, [open, initialFormat]);
 
@@ -67,9 +68,14 @@ export function ExportOptionsModal(props: {
               className={format === 'instagram' ? 'primary' : ''}
               onClick={() => setFormat('instagram')}
             >Instagram (9:16)</button>
+            <button className={format === 'both' ? 'primary' : ''}
+              onClick={() => setFormat('both')}>Both</button>
           </div>
         </div>
-        {format === 'instagram' && previewClip && (
+        {format === 'both' && <div className="dim" style={{ fontSize: 12 }}>
+          Saves two files with _standard and _instagram suffixes. Exports run one after the other.
+        </div>}
+        {format !== 'standard' && previewClip && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="dim" style={{ fontSize: 12 }}>
               {driverSummary(previewClip, context.source)}
