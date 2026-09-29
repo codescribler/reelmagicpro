@@ -182,7 +182,13 @@ export function Preview() {
     if (!seekRequest) return;
     const v = videoRef.current;
     if (!v || !previewSource) return;
-    v.currentTime = Math.max(0, Math.min(previewSource.duration, seekRequest.time));
+    const seek = () => {
+      v.currentTime = Math.max(0, Math.min(previewSource.duration, seekRequest.time));
+      previewClock.currentTime = v.currentTime;
+    };
+    if (v.readyState >= 1) seek();
+    else v.addEventListener('loadedmetadata', seek, { once: true });
+    return () => v.removeEventListener('loadedmetadata', seek);
   }, [seekRequest?.token]);
 
   // Relative skip nudges. Single mechanism shared with the clip editor's

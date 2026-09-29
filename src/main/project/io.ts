@@ -16,6 +16,7 @@ export function serializeProject(project: Project): unknown {
     const bookmarks: Bookmark[] = project.bookmarks.map(b => ({ ...b }));
     return {
       version: 2,
+      playbackPosition: project.playbackPosition,
       sources: project.sources,
       clips,
       sequence: project.sequence,
@@ -39,6 +40,7 @@ export function serializeProject(project: Project): unknown {
   const bookmarks = project.bookmarks.map(({ sourceId: _drop, ...rest }) => rest);
   return {
     version: 1,
+    playbackPosition: project.playbackPosition ? { time: project.playbackPosition.time } : undefined,
     sourceVideo: single,
     clips,
     sequence: project.sequence,

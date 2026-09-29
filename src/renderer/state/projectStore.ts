@@ -149,15 +149,16 @@ export const useProjectStore = create<State>((set, get) => ({
   sequenceAppendToken: 0,
   activeSourceId: null,
 
-  setProject: (p, path) => set({
+  setProject: (p, path) => set(state => ({
     // Normalize on entry so older project files (or a stale main bundle
     // that hasn't picked up the bookmarks schema default yet) can't crash
     // the renderer with `project.bookmarks` being undefined.
     project: p ? { ...p, bookmarks: p.bookmarks ?? [] } : null,
     projectPath: path ?? null, dirty: false,
     selectedClipId: null, previewMode: p ? { kind: 'source' } : { kind: 'idle' },
-    activeSourceId: p?.sources[0]?.id ?? null,
-  }),
+    activeSourceId: p?.sources.find(s => s.id === p.playbackPosition?.sourceId)?.id ?? p?.sources[0]?.id ?? null,
+    seekRequest: p ? { time: p.playbackPosition?.time ?? 0, token: (state.seekRequest?.token ?? 0) + 1 } : null,
+  })),
   setProjectPath: (path) => set({ projectPath: path }),
   markClean: () => set({ dirty: false }),
   // First-source / replace-source entry point used by the empty-state CTA

@@ -1,4 +1,4 @@
-import { mediaFileUrl, musicGain, musicWindow } from '../../src/shared/musicTiming';
+import { alignMusicMoments, mediaFileUrl, musicGain, musicWindow, nudgeMusicMoment } from '../../src/shared/musicTiming';
 import { musicFilter } from '../../src/main/ffmpeg/musicFilter';
 import { buildClipFfmpegArgs } from '../../src/main/ffmpeg/command';
 import { buildFilterConcatFfmpegArgs } from '../../src/main/ffmpeg/concatList';
@@ -8,6 +8,28 @@ import { serializeProject } from '../../src/main/project/io';
 
 const track: BackingTrack = { path: 'song.wav', volume: 0.6, muteSource: true,
   durationSec: 60, offsetSec: 8 - 42, fadeInSec: 1 };
+
+test.each([0.05, -0.05])('alignment retains repeated %s second music moment adjustments', delta => {
+  let adjusted = { ...track, videoMomentSec: 8, musicMomentSec: 42 };
+  for (let i = 0; i < 4; i++) {
+    adjusted = { ...adjusted, ...nudgeMusicMoment(adjusted, delta, 60) };
+  }
+  expect(adjusted.musicMomentSec).toBeCloseTo(42 + 4 * delta);
+  expect(adjusted.offsetSec).toBe(track.offsetSec);
+  const aligned = { ...adjusted, ...alignMusicMoments(adjusted) };
+  expect(aligned.musicMomentSec).toBeCloseTo(42 + 4 * delta);
+  expect(aligned.videoMomentSec - aligned.offsetSec).toBeCloseTo(42 + 4 * delta);
+  expect(aligned.offsetSec).not.toBe(track.offsetSec);
+  expect({ ...aligned, ...alignMusicMoments(aligned) }).toEqual(aligned);
+});
+
+test('music moment nudges stop at the song boundaries and require a marker', () => {
+  expect(nudgeMusicMoment({ ...track, musicMomentSec: 0.02 }, -0.05, 60)).toEqual({ musicMomentSec: 0 });
+  expect(nudgeMusicMoment({ ...track, musicMomentSec: 59.98 }, 0.05, 60)).toEqual({ musicMomentSec: 60 });
+  expect(nudgeMusicMoment(track, 0.05, 60)).toEqual({});
+  expect(nudgeMusicMoment({ ...track, musicMomentSec: 42 }, 0.05, 0)).toEqual({});
+  expect(alignMusicMoments(track)).toEqual({});
+});
 
 test('alignment settings and both markers survive saving and reopening', () => {
   const backingTrack = { ...track, videoMomentSec: 8, musicMomentSec: 42 };

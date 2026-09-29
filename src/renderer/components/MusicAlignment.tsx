@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { BackingTrack, Clip } from '../../shared/types';
-import { mediaFileUrl } from '../../shared/musicTiming';
+import { alignMusicMoments, mediaFileUrl, nudgeMusicMoment } from '../../shared/musicTiming';
 import { useProjectStore } from '../state/projectStore';
 import { previewClock } from '../state/previewClock';
 import { MusicWaveform, useMusicWaveform } from './MusicWaveform';
@@ -119,19 +119,22 @@ function AlignmentPanel({ track, clip }: { track: BackingTrack; clip?: Clip }) {
       <span className="music-marker-label">{track.musicMomentSec === undefined ? 'No music marker' : seconds(track.musicMomentSec)}</span>
       <button className="primary" disabled={!canAlign} onClick={() => {
         audio.current?.pause();
-        patch({ offsetSec: track.videoMomentSec! - track.musicMomentSec!, fadeInSec: track.fadeInSec ?? 1 });
+        patch(alignMusicMoments(track));
       }}>Align moments</button>
       <label>Fade in <input aria-label="Music fade in seconds" type="number" min="0" max="10" step="0.1"
         value={track.fadeInSec ?? 0} onChange={e => {
           if (Number.isFinite(e.currentTarget.valueAsNumber)) patch({ fadeInSec: Math.max(0, Math.min(10, e.currentTarget.valueAsNumber)) });
         }} /> s</label>
-      <button title="Move music 0.05 seconds earlier" onClick={() => patch({ offsetSec: offset - 0.05 })}>−0.05s</button>
-      <button title="Move music 0.05 seconds later" onClick={() => patch({ offsetSec: offset + 0.05 })}>+0.05s</button>
+      <button title="Move the music moment 0.05 seconds earlier in the song" disabled={track.musicMomentSec === undefined || !duration}
+        onClick={() => patch(nudgeMusicMoment(track, -0.05, duration))}>−0.05s</button>
+      <button title="Move the music moment 0.05 seconds later in the song" disabled={track.musicMomentSec === undefined || !duration}
+        onClick={() => patch(nudgeMusicMoment(track, 0.05, duration))}>+0.05s</button>
       <button onClick={() => patch({ offsetSec: undefined, videoMomentSec: undefined, musicMomentSec: undefined })}>Reset alignment</button>
     </div>
     <div className="dim" aria-live="polite">{offset < 0
       ? `Music starts ${seconds(-offset)} into the song.` : `Music enters at ${seconds(offset)} in the video.`}
-      {' '}Select a marker: ←/→ nudge 0.01s, Shift 0.1s, Delete removes it. Use Align moments after adjusting.
+      {' '}The ±0.05s buttons adjust the music moment within the song. Use Align moments after adjusting.
+      {' '}Select a marker: ←/→ nudge 0.01s, Shift 0.1s, Delete removes it.
       {track.videoMomentSec !== undefined && track.videoMomentSec > total && ' Video marker is outside the current edit. Mark it again.'}
       {duration > 0 && duration + offset < total && ' The song ends before the video; the remaining video continues without music.'}
     </div>

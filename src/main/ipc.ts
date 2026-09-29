@@ -63,19 +63,23 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     }
   });
 
-  ipcMain.handle('app:loadProject', async (): Promise<LoadProjectResult> => {
-    const win = getWindow();
-    if (!win) return { ok: false, error: 'No window' };
-    const r = await dialog.showOpenDialog(win, {
-      properties: ['openFile'],
-      filters: [{ name: 'ReelMagic Project', extensions: ['rmproj', 'json'] }],
-    });
-    if (r.canceled || !r.filePaths[0]) return { ok: false };
+  ipcMain.handle('app:loadProject', async (_e, requestedPath?: string): Promise<LoadProjectResult> => {
+    let target = requestedPath;
+    if (!target) {
+      const win = getWindow();
+      if (!win) return { ok: false, error: 'No window' };
+      const r = await dialog.showOpenDialog(win, {
+        properties: ['openFile'],
+        filters: [{ name: 'ReelMagic Project', extensions: ['rmproj', 'json'] }],
+      });
+      if (r.canceled || !r.filePaths[0]) return { ok: false };
+      target = r.filePaths[0];
+    }
     try {
-      const result = await loadProject(r.filePaths[0]);
+      const result = await loadProject(target);
       return {
         ok: true,
-        path: r.filePaths[0],
+        path: target,
         project: result.project,
         warnings: result.warnings,
         invalidClipIds: result.invalidClipIds,

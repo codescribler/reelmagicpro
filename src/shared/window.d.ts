@@ -18,7 +18,7 @@ declare global {
     reelmagic: {
       openSourceVideo: () => Promise<OpenSourceVideoResult>;
       saveProject: (args: SaveProjectArgs) => Promise<SaveProjectResult>;
-      loadProject: () => Promise<LoadProjectResult>;
+      loadProject: (path?: string) => Promise<LoadProjectResult>;
       exportClip: (args: ExportClipArgs) => Promise<ExportResult>;
       exportSequence: (args: ExportSequenceArgs) => Promise<ExportResult>;
       cancelExport: (runId: string) => Promise<{ ok: boolean }>;

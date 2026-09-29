@@ -1,15 +1,16 @@
 import { useProjectStore } from './projectStore';
+import { useRecentProjects } from './recentProjects';
 
 // Shared "open a saved project" flow used by both the menubar (`MenuActions`)
 // and the empty-state hero. Handles the source-not-found relink prompt and
 // warnings so the entry points stay one-liners.
-export async function loadProjectInteractive(): Promise<void> {
+export async function loadProjectInteractive(path?: string): Promise<void> {
   const dirty = useProjectStore.getState().dirty;
   if (dirty) {
     const ok = window.confirm('You have unsaved changes. Discard them?');
     if (!ok) return;
   }
-  const r = await window.reelmagic.loadProject();
+  const r = await window.reelmagic.loadProject(path);
   if (!r.ok || !r.project) {
     if (r.error) alert(`Couldn't load project: ${r.error}`);
     return;
@@ -35,6 +36,7 @@ export async function loadProjectInteractive(): Promise<void> {
     }
   }
   useProjectStore.getState().setProject(relinked, r.path ?? null);
+  if (r.path) useRecentProjects.getState().remember(r.path);
   if (r.invalidClipIds && r.invalidClipIds.length > 0) {
     useProjectStore.setState({ invalidClipIds: new Set(r.invalidClipIds) });
   }

@@ -51,7 +51,7 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
     const sh = clipSource.height;
     const w = Math.round(sw * 0.15);
     const h = Math.round(sh * 0.25);
-    const m: FocusMarker = {
+    let m: FocusMarker = {
       id: newMarkerId(),
       x: Math.round((sw - w) / 2),
       y: Math.round((sh - h) / 2),
@@ -63,6 +63,11 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
       shape: 'pitch',
       pitchOpacity: 0.15,
     };
+    // Start with six shrink clicks, then seven upward circle nudges.
+    for (let i = 0; i < 6; i++) {
+      m = { ...m, ...scaleMarker(m, 1 / SIZE_STEP, sw, sh) };
+    }
+    m.pitchOffsetY = -7 * Math.max(1, Math.round(m.width * 0.025));
     addMarker(clip.id, m);
     setMode({ kind: 'track-marker', clipId: clip.id, markerId: m.id });
   }

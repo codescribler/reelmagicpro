@@ -1,6 +1,8 @@
 import React from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { loadProjectInteractive } from '../state/loadProject';
+import { useRecentProjects } from '../state/recentProjects';
+import { previewClock } from '../state/previewClock';
 
 async function confirmDiscardIfDirty(dirty: boolean): Promise<boolean> {
   if (!dirty) return true;
@@ -22,10 +24,14 @@ export function MenuActions() {
   async function onSave(forceDialog = false) {
     if (!project) return;
     const r = await window.reelmagic.saveProject({
-      project,
+      project: { ...project, playbackPosition: {
+        time: previewClock.currentTime,
+        sourceId: useProjectStore.getState().activeSourceId ?? undefined,
+      } },
       suggestedPath: forceDialog ? undefined : projectPath ?? undefined,
     });
     if (r.ok && r.path) {
+      useRecentProjects.getState().remember(r.path);
       useProjectStore.setState({ projectPath: r.path });
       markClean();
     } else if (r.error) {

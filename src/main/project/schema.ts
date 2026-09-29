@@ -85,6 +85,7 @@ const BookmarkSchema = z.object({
 // is present and migrates to the canonical in-memory representation
 // (always both `sourceVideo` and `sources`).
 const ProjectSchema = z.object({
+  playbackPosition: z.object({ time: z.number().finite(), sourceId: z.string().optional() }).optional(),
   version: z.union([z.literal(1), z.literal(2)]),
   sourceVideo: SourceSchema.optional(),
   sources: z.array(SourceVideoSchema).optional(),
@@ -202,6 +203,10 @@ export function parseAndClampProject(raw: unknown): ParseResult {
     bookmarks,
     sequenceBackingTrack: parsed.sequenceBackingTrack,
     sequenceBrightness: parsed.sequenceBrightness,
+    playbackPosition: parsed.playbackPosition ? (() => {
+      const source = sources.find(s => s.id === parsed.playbackPosition!.sourceId) ?? primary;
+      return { time: Math.max(0, Math.min(source.duration, parsed.playbackPosition.time)), sourceId: source.id };
+    })() : undefined,
   };
 
   return { project, warnings, invalidClipIds };

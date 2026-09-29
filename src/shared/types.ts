@@ -130,6 +130,7 @@ export interface Bookmark {
 // `sources` array, so existing read sites that say `project.sourceVideo`
 // continue to compile and resolve to the primary source.
 export interface Project {
+  playbackPosition?: { time: number; sourceId?: string };
   version: 1 | 2;
   sourceVideo: SourceMeta;
   sources: SourceVideo[];

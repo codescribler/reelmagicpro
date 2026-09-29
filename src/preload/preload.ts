@@ -11,8 +11,8 @@ contextBridge.exposeInMainWorld('reelmagic', {
     ipcRenderer.invoke('app:openSourceVideo'),
   saveProject: (args: SaveProjectArgs): Promise<SaveProjectResult> =>
     ipcRenderer.invoke('app:saveProject', args),
-  loadProject: (): Promise<LoadProjectResult> =>
-    ipcRenderer.invoke('app:loadProject'),
+  loadProject: (path?: string): Promise<LoadProjectResult> =>
+    ipcRenderer.invoke('app:loadProject', path),
   exportClip: (args: ExportClipArgs): Promise<ExportResult> =>
     ipcRenderer.invoke('app:exportClip', args),
   exportSequence: (args: ExportSequenceArgs): Promise<ExportResult> =>

@@ -1,5 +1,15 @@
 import type { BackingTrack } from './types';
 
+export function nudgeMusicMoment(track: BackingTrack, delta: number, duration: number) {
+  if (track.musicMomentSec === undefined || duration <= 0) return {};
+  return { musicMomentSec: Math.max(0, Math.min(duration, track.musicMomentSec + delta)) };
+}
+
+export function alignMusicMoments(track: BackingTrack) {
+  if (track.videoMomentSec === undefined || track.musicMomentSec === undefined) return {};
+  return { offsetSec: track.videoMomentSec - track.musicMomentSec, fadeInSec: track.fadeInSec ?? 1 };
+}
+
 export function musicWindow(track: BackingTrack, outputDuration: number) {
   const offset = track.offsetSec ?? 0;
   const start = Math.max(0, offset);
