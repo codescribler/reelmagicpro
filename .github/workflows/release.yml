@@ -21,7 +21,11 @@ jobs:
 
       - run: npm ci
 
-      - run: npm test --if-present
+      - name: Run unit and export integration tests
+        run: npm run test:all -- --runInBand
+
+      - name: Check renderer types
+        run: npx tsc --noEmit -p tsconfig.renderer.json
 
       - name: Build & publish
         env:

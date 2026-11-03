@@ -43,7 +43,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
   // once the speed has been pulled below 1×. Sound is done once a backing
   // track has been chosen.
   const trackDone = clip.focusMarkers.length > 0;
-  const zoomDone = !isFullFrame;
+  const zoomDone = !isFullFrame || !!clip.zoomPath?.length;
   const slowmoDone = clip.speed < 1;
   const soundDone = !!clip.backingTrack;
   const reelFramed = !!clip.reelFraming && clip.reelFraming.panPath.length > 0;
@@ -79,7 +79,19 @@ export function ClipEditor({ clipId }: { clipId: string }) {
           <span className="step-num">2.</span> Zoom in <span className="step-optional">(optional)</span>
         </h3>
         <p className="step-hint">
-          Draw a focus box and only that area will be in the export. The box follows the primary player you tagged above.
+          Record a moving zoom: follow the action with your pointer and scroll to zoom in or out.
+          Gentle smoothing keeps the movement fluid in the preview and export.
+        </p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          <button onClick={() => setMode({ kind: 'record-zoom', clipId })}>
+            {clip.zoomPath?.length ? 'Re-record zoom' : 'Record zoom'}
+          </button>
+          <button disabled={!clip.zoomPath?.length} onClick={() => update(clipId, { zoomPath: undefined })}>
+            Clear recorded zoom
+          </button>
+        </div>
+        <p className="step-hint">
+          Or draw a fixed focus box. A recorded zoom takes priority until you clear it.
         </p>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button

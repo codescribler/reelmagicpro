@@ -62,6 +62,7 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
       color: 'white',
       shape: 'pitch',
       pitchOpacity: 0.15,
+      smoothing: 1,
     };
     // Start with six shrink clicks, then seven upward circle nudges.
     for (let i = 0; i < 6; i++) {
@@ -229,6 +230,16 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, showPrimaryStar, i
         />
         <button onClick={onDelete} title="Delete this tag" style={{ flex: '0 0 auto' }}>×</button>
       </div>
+      {marker.label && (
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: 11 }}>
+          <span className="dim">Text size</span>
+          <input type="range" min={10} max={100} step={5} aria-label="Tag font size"
+            value={Math.round((marker.labelScale ?? 1) * 100)}
+            onChange={e => onUpdate({ labelScale: Number(e.target.value) / 100 })}
+            style={{ flex: 1, minWidth: 0 }} />
+          <span style={{ minWidth: 32, textAlign: 'right' }}>{Math.round((marker.labelScale ?? 1) * 100)}%</span>
+        </label>
+      )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <button
           className={hasPath ? '' : 'primary'}

@@ -1,0 +1,21 @@
+.dynamic-zoom-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  cursor: crosshair;
+}
+.dynamic-zoom-hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(12, 16, 20, 0.9);
+  color: #fff;
+  text-align: center;
+  font-size: 13px;
+  max-width: calc(100% - 28px);
+  width: max-content;
+}
+.dynamic-zoom-hint { top: 12px; pointer-events: none; }
+.dynamic-zoom-hint span { display: block; margin-top: 4px; font-size: 12px; }

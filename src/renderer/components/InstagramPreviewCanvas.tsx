@@ -3,6 +3,7 @@ import type { Clip, SourceMeta, FocusMarker } from '../../shared/types';
 import { computeReelFraming, ReelFramingSample } from '../../shared/instagramFraming';
 import { markerCentreAt } from '../state/markerPosition';
 import { markerForDisplay } from '../../shared/pitchMarker';
+import { clipCropAt } from '../../shared/dynamicZoom';
 
 const DISPLAY_W = 270;
 const DISPLAY_H = 480;
@@ -117,7 +118,7 @@ function drawReelFrame(
   source: SourceMeta,
   s: ReelFramingSample,
 ) {
-  const z = clip.zoom;
+  const z = clipCropAt(clip, source, Math.max(0, v.currentTime - clip.in));
   const srcW = source.width;
   const srcH = source.height;
   // The reel slice (s) is in POST-ZOOM source pixels. Map it back to the raw
@@ -201,15 +202,16 @@ function drawMarker(
     ctx.fillRect(x, y + h - 3, w, 3); // thicker bottom edge, matching the export
   }
   if (m.label) {
-    const fontSize = Math.max(9, Math.round(h * 0.16));
+    const labelScale = m.labelScale ?? 1;
+    const fontSize = Math.max(1, Math.max(9, Math.round(h * 0.16)) * labelScale);
     ctx.font = `600 ${fontSize}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     const tw = ctx.measureText(m.label).width;
     const tx = x + w / 2;
-    const ty = y + h + fontSize + 4;
+    const ty = y + h + fontSize + 4 * labelScale;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(tx - tw / 2 - 4, ty - fontSize, tw + 8, fontSize + 6);
+    ctx.fillRect(tx - tw / 2 - 4 * labelScale, ty - fontSize, tw + 8 * labelScale, fontSize + 6 * labelScale);
     ctx.fillStyle = m.color;
     ctx.fillText(m.label, tx, ty);
   }

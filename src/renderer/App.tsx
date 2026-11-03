@@ -84,7 +84,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
       if (isTyping()) return;
       const st = useProjectStore.getState();
       if (!st.project) return;
-      if (st.previewMode.kind === 'track-marker') return;
+      if (st.previewMode.kind === 'track-marker' || st.previewMode.kind === 'record-zoom') return;
 
       if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
@@ -237,7 +237,9 @@ function Editor({ pastDue }: { pastDue: boolean }) {
     setExportOptions(null);
     if (!ctx || !result.ok || !result.format || !project) return;
     const out = await window.reelmagic.chooseExportPath(
-      ctx.kind === 'clip' ? `${ctx.clip.name}.mp4` : 'sequence.mp4', result.format === 'both',
+      ctx.kind === 'clip' ? `${ctx.clip.name}.mp4`
+        : `${(project.namedSequences?.find(sequence => sequence.id === project.activeSequenceId)?.name ?? 'sequence')
+          .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.mp4`, result.format === 'both',
     );
     if (!out.ok || !out.path) return;
     const completed: string[] = [];
@@ -287,7 +289,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
   // a thin discovery stripe at exactly 1 clip so a returning user knows the
   // feature exists.
   const seqMode: 'full' | 'hint' | 'none' =
-    project.sequence.length > 0 || project.clips.length >= 2 ? 'full'
+    project.namedSequences?.length || project.sequence.length > 0 || project.clips.length >= 2 ? 'full'
       : project.clips.length === 1 ? 'hint'
       : 'none';
 

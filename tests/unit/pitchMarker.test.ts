@@ -32,12 +32,12 @@ test('pitch style survives project save and reload', () => {
     sourceVideo: { path: 'match.mp4', width: 1920, height: 1080, duration: 5, fps: 30 },
     clips: [{ id: 'c', name: 'Clip', in: 0, out: 2, speed: 1,
       zoom: { x: 0, y: 0, width: 1920, height: 1080 },
-      focusMarkers: [{ ...marker, pitchOffsetX: -12, pitchOffsetY: 25, smoothing: 0.5, pitchOpacity: 0.2 }] }],
+      focusMarkers: [{ ...marker, pitchOffsetX: -12, pitchOffsetY: 25, smoothing: 0.5, pitchOpacity: 0.2, labelScale: 0.25 }] }],
     sequence: [],
   });
   const reloaded = parseAndClampProject(serializeProject(project)).project;
   expect(reloaded.clips[0]!.focusMarkers[0]!.shape).toBe('pitch');
-  expect(reloaded.clips[0]!.focusMarkers[0]).toMatchObject({ pitchOffsetX: -12, pitchOffsetY: 25, smoothing: 0.5, pitchOpacity: 0.2 });
+  expect(reloaded.clips[0]!.focusMarkers[0]).toMatchObject({ pitchOffsetX: -12, pitchOffsetY: 25, smoothing: 0.5, pitchOpacity: 0.2, labelScale: 0.25 });
 });
 
 test('position adjustments apply equally to static and tracked circles', () => {

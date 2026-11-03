@@ -20,6 +20,7 @@ export function ClipDetail({ onExport }: {
   const updateClip = useProjectStore(s => s.updateClip);
   const appendToSequence = useProjectStore(s => s.appendToSequence);
   const replayClip = useProjectStore(s => s.replayClip);
+  const recordingZoom = useProjectStore(s => s.previewMode.kind === 'record-zoom');
   const clipCreatedToken = useProjectStore(s => s.clipCreatedToken);
   const exportBtnRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLTextAreaElement>(null);
@@ -83,6 +84,7 @@ export function ClipDetail({ onExport }: {
         <div className="clip-controls">
           <button
             onClick={replayClip}
+            disabled={recordingZoom}
             title="Rewind to the start of this clip and play it back">
             ↻ Replay clip
           </button>

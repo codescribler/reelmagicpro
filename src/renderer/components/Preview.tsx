@@ -9,6 +9,9 @@ import { clampPlayhead, snapToFrame } from '../state/playhead';
 import { ZoomRegionOverlay } from './ZoomRegionOverlay';
 import { TrackMarkerOverlay } from './TrackMarkerOverlay';
 import { ReelFrameOverlay } from './ReelFrameOverlay';
+import { DynamicZoomOverlay } from './DynamicZoomOverlay';
+import { cameraCrop, clipCropAt } from '../../shared/dynamicZoom';
+import type { CameraView } from '../../shared/types';
 import { TransportBar } from './TransportBar';
 import { resolveSource, resolveSourceForClip } from '../../shared/resolveSource';
 
@@ -27,6 +30,7 @@ export function Preview() {
   // their in/out times. Held in state so the JSX re-runs the visibility
   // filter every tick.
   const [tickTime, setTickTime] = useState(0);
+  const [liveCamera, setLiveCamera] = useState<CameraView>();
 
   const seqIndex = previewMode.kind === 'sequence' ? previewMode.index : -1;
 
@@ -35,6 +39,7 @@ export function Preview() {
     if (previewMode.kind === 'clip'
       || previewMode.kind === 'set-zoom'
       || previewMode.kind === 'track-marker'
+      || previewMode.kind === 'record-zoom'
       || previewMode.kind === 'frame-reel') {
       return project.clips.find(c => c.id === previewMode.clipId) ?? null;
     }
@@ -103,7 +108,7 @@ export function Preview() {
     // One owner for playback speed: overlay mount effects must not compete
     // with clip playback or backing-track changes when entering tracking.
     const apply = () => {
-      const tracking = previewMode.kind === 'track-marker' || previewMode.kind === 'frame-reel';
+      const tracking = previewMode.kind === 'track-marker' || previewMode.kind === 'frame-reel' || previewMode.kind === 'record-zoom';
       v.playbackRate = tracking ? trackingRate : (activeClip?.speed ?? 1);
       v.muted = tracking || (!!activeClip && (activeClip.speed !== 1 || !!activeBackingTrack?.muteSource));
     };
@@ -428,6 +433,7 @@ export function Preview() {
   const isSetZoom = previewMode.kind === 'set-zoom';
   const isTrackMarker = previewMode.kind === 'track-marker';
   const isFrameReel = previewMode.kind === 'frame-reel';
+  const isRecordZoom = previewMode.kind === 'record-zoom';
   // set-zoom and track-marker interact with the FULL source frame, so the zoom
   // transform is suspended for them. Reel framing pans within the ZOOMED frame
   // (reels apply the focus-box zoom), so it KEEPS the zoom transform applied —
@@ -435,12 +441,14 @@ export function Preview() {
   const suspendZoom = isSetZoom || isTrackMarker;
   // Any overlay mode hides the play/scrub affordances so the overlay owns the
   // picture surface.
-  const isOverlayMode = suspendZoom || isFrameReel;
+  const isOverlayMode = suspendZoom || isFrameReel || isRecordZoom;
 
   let zoomTransform = '';
   let zoomFactor = 1;
   if (activeClip && !suspendZoom) {
-    const z = activeClip.zoom;
+    const z = isRecordZoom
+      ? cameraCrop(liveCamera ?? { cx: sw / 2, cy: sh / 2, zoom: 1 }, previewSource)
+      : clipCropAt(activeClip, previewSource, Math.max(0, tickTime - activeClip.in));
     const fullFrame = z.x === 0 && z.y === 0 && z.width === sw && z.height === sh;
     if (!fullFrame) {
       const sx = sw / z.width;
@@ -457,7 +465,7 @@ export function Preview() {
   // playhead is the video's currentTime in source seconds. In editing modes
   // we hide markers.
   const visibleMarkers = (() => {
-    if (!activeClip || suspendZoom) return [];
+    if (!activeClip || suspendZoom || isRecordZoom) return [];
     return activeClip.focusMarkers.filter(m => tickTime >= m.in && tickTime <= m.out);
   })();
   const clipRelT = activeClip ? Math.max(0, tickTime - activeClip.in) : 0;
@@ -540,13 +548,13 @@ export function Preview() {
                     <div style={{
                       position: 'absolute',
                       left: left + w / 2,
-                      top: top + h + 4,
+                      top: top + h + 4 * (m.labelScale ?? 1),
                       transform: 'translateX(-50%)',
                       background: 'rgba(0,0,0,0.7)',
                       color: m.color,
-                      padding: '2px 8px',
-                      borderRadius: 3,
-                      fontSize: 13 * fit + 8,
+                      padding: `${2 * (m.labelScale ?? 1)}px ${8 * (m.labelScale ?? 1)}px`,
+                      borderRadius: 3 * (m.labelScale ?? 1),
+                      fontSize: (13 * fit + 8) * (m.labelScale ?? 1),
                       fontWeight: 600,
                       whiteSpace: 'nowrap',
                       pointerEvents: 'none',
@@ -602,6 +610,10 @@ export function Preview() {
             displayWidth={dw}
             displayHeight={dh}
           />
+        )}
+        {isRecordZoom && activeClip && (
+          <DynamicZoomOverlay key={`${activeClip.id}:${previewSource.path}:${activeClip.in}:${activeClip.out}`}
+            clip={activeClip} source={previewSource} videoRef={videoRef} onView={setLiveCamera} />
         )}
         {!isOverlayMode && <TransportBar videoRef={videoRef} />}
       </div>

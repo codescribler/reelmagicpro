@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import type { Project, Clip, SourceMeta, SourceVideo, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack, ReelFraming } from '../../shared/types';
 import { newSourceId, resolveSource } from '../../shared/resolveSource';
+import { trimZoomPath } from '../../shared/dynamicZoom';
+import { pruneSequenceClips, restoreActiveSequence, syncActiveSequence } from '../../shared/namedSequences';
+import { namedSequenceActions } from './namedSequenceActions';
+import type { NamedSequenceActions } from './namedSequenceActions';
 
 // Strip a SourceVideo down to the plain SourceMeta fields used by the
 // in-memory `project.sourceVideo` mirror. Matches parseAndClampProject's
@@ -19,10 +23,11 @@ export type PreviewMode =
   | { kind: 'clip'; clipId: string }
   | { kind: 'sequence'; index: number }
   | { kind: 'set-zoom'; clipId: string }
+  | { kind: 'record-zoom'; clipId: string }
   | { kind: 'track-marker'; clipId: string; markerId: string }
   | { kind: 'frame-reel'; clipId: string };
 
-interface State {
+export interface State extends NamedSequenceActions {
   project: Project | null;
   projectPath: string | null;
   dirty: boolean;
@@ -139,6 +144,7 @@ function newBookmarkId(): string {
 }
 
 export const useProjectStore = create<State>((set, get) => ({
+  ...namedSequenceActions(set, get),
   project: null,
   projectPath: null,
   dirty: false,
@@ -153,7 +159,7 @@ export const useProjectStore = create<State>((set, get) => ({
     // Normalize on entry so older project files (or a stale main bundle
     // that hasn't picked up the bookmarks schema default yet) can't crash
     // the renderer with `project.bookmarks` being undefined.
-    project: p ? { ...p, bookmarks: p.bookmarks ?? [] } : null,
+    project: p ? restoreActiveSequence({ ...p, bookmarks: p.bookmarks ?? [] }) : null,
     projectPath: path ?? null, dirty: false,
     selectedClipId: null, previewMode: p ? { kind: 'source' } : { kind: 'idle' },
     activeSourceId: p?.sources.find(s => s.id === p.playbackPosition?.sourceId)?.id ?? p?.sources[0]?.id ?? null,
@@ -263,12 +269,12 @@ export const useProjectStore = create<State>((set, get) => ({
       const newPrimary = nextSources[0]!;
       const nextActive = s.activeSourceId === sourceId ? newPrimary.id : s.activeSourceId;
       return {
-        project: {
+        project: pruneSequenceClips({
           ...s.project,
           sourceVideo: toSourceMeta(newPrimary),
           sources: nextSources,
           clips, bookmarks, sequence,
-        },
+        }),
         activeSourceId: nextActive,
         selectedClipId: s.selectedClipId && removedClipIds.has(s.selectedClipId)
           ? null : s.selectedClipId,
@@ -339,7 +345,14 @@ export const useProjectStore = create<State>((set, get) => ({
     clipCreatedToken: state.clipCreatedToken + 1,
   }) : state),
   updateClip: (id, patch) => set(state => state.project ? ({
-    project: { ...state.project, clips: state.project.clips.map(c => c.id === id ? { ...c, ...patch } : c) },
+    project: { ...state.project, clips: state.project.clips.map(c => {
+      if (c.id !== id) return c;
+      const next = { ...c, ...patch };
+      if (!('zoomPath' in patch) && (next.in !== c.in || next.out !== c.out)) {
+        next.zoomPath = trimZoomPath(c.zoomPath, next.in - c.in, next.out - next.in);
+      }
+      return next;
+    }) },
     dirty: true,
   }) : state),
   deleteClip: (id) => set(state => {
@@ -356,6 +369,7 @@ export const useProjectStore = create<State>((set, get) => ({
       (state.previewMode.kind === 'clip'
         || state.previewMode.kind === 'set-zoom'
         || state.previewMode.kind === 'track-marker'
+        || state.previewMode.kind === 'record-zoom'
         || state.previewMode.kind === 'frame-reel')
       && state.previewMode.clipId === id
     ) {
@@ -365,7 +379,7 @@ export const useProjectStore = create<State>((set, get) => ({
     }
 
     return {
-      project: { ...state.project, clips: state.project.clips.filter(c => c.id !== id), sequence: newSequence },
+      project: pruneSequenceClips({ ...state.project, clips: state.project.clips.filter(c => c.id !== id), sequence: newSequence }),
       selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
       previewMode: nextPreviewMode,
       dirty: true,
@@ -381,6 +395,7 @@ export const useProjectStore = create<State>((set, get) => ({
       id: newId(),
       name: `${orig.name} (copy)`,
       zoom: { ...orig.zoom },
+      zoomPath: orig.zoomPath?.map(p => ({ ...p })),
       focusMarkers: orig.focusMarkers.map(m => ({ ...m, id: newMarkerId() })),
       ...(orig.reelFraming
         ? { reelFraming: { panPath: orig.reelFraming.panPath.map(p => ({ ...p })) } }
@@ -416,21 +431,32 @@ export const useProjectStore = create<State>((set, get) => ({
   replayToken: 0,
   replayClip: () => set(state => ({ replayToken: state.replayToken + 1 })),
   appendToSequence: (clipId) => set(state => state.project ? ({
-    project: { ...state.project, sequence: [...state.project.sequence, { clipId }] },
+    project: syncActiveSequence({ ...state.project, sequence: [...state.project.sequence, { clipId }] }),
     dirty: true,
     sequenceAppendToken: state.sequenceAppendToken + 1,
   }) : state),
   reorderSequence: (from, to) => set(state => {
     if (!state.project) return state;
+    const length = state.project.sequence.length;
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0
+      || from >= length || to >= length || from === to) return state;
     const seq = [...state.project.sequence];
     const [moved] = seq.splice(from, 1);
     if (moved) seq.splice(to, 0, moved);
-    return { project: { ...state.project, sequence: seq }, dirty: true };
+    let previewMode = state.previewMode;
+    if (previewMode.kind === 'sequence') {
+      let index = previewMode.index;
+      if (index === from) index = to;
+      else if (from < index && to >= index) index--;
+      else if (from > index && to <= index) index++;
+      previewMode = { kind: 'sequence', index };
+    }
+    return { project: syncActiveSequence({ ...state.project, sequence: seq }), previewMode, dirty: true };
   }),
   removeFromSequence: (index) => set(state => {
     if (!state.project) return state;
     const seq = state.project.sequence.filter((_, i) => i !== index);
-    return { project: { ...state.project, sequence: seq }, dirty: true };
+    return { project: syncActiveSequence({ ...state.project, sequence: seq }), dirty: true };
   }),
   clearSequence: () => set(state => {
     if (!state.project) return state;
@@ -441,7 +467,7 @@ export const useProjectStore = create<State>((set, get) => ({
       ? { kind: 'source' as const }
       : state.previewMode;
     return {
-      project: { ...state.project, sequence: [] },
+      project: syncActiveSequence({ ...state.project, sequence: [] }),
       previewMode: nextPreviewMode,
       dirty: true,
     };
@@ -451,7 +477,7 @@ export const useProjectStore = create<State>((set, get) => ({
     const project = { ...state.project };
     if (track) project.sequenceBackingTrack = track;
     else delete project.sequenceBackingTrack;
-    return { project, dirty: true };
+    return { project: syncActiveSequence(project), dirty: true };
   }),
   setSequenceBrightness: (value) => set(state => {
     if (!state.project) return state;
@@ -463,7 +489,7 @@ export const useProjectStore = create<State>((set, get) => ({
     } else {
       project.sequenceBrightness = value;
     }
-    return { project, dirty: true };
+    return { project: syncActiveSequence(project), dirty: true };
   }),
 
   nudgeClipBoundary: (clipId, which, deltaSec) => set(state => {
@@ -497,7 +523,8 @@ export const useProjectStore = create<State>((set, get) => ({
       project: {
         ...state.project,
         clips: state.project.clips.map(c =>
-          c.id === clipId ? { ...c, in: newIn, out: newOut, focusMarkers } : c
+          c.id === clipId ? { ...c, in: newIn, out: newOut, focusMarkers,
+            zoomPath: trimZoomPath(c.zoomPath, newIn - clip.in, newOut - newIn) } : c
         ),
       },
       dirty: true,

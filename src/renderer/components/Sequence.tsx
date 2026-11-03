@@ -4,6 +4,9 @@ import { SequenceMusicButton } from './SequenceMusicButton';
 import { SequenceAdvancedButton } from './SequenceAdvancedButton';
 import { sourceColour } from '../lib/sourceColors';
 import type { Project } from '../../shared/types';
+import { useSequenceDrag } from '../lib/sequenceDrag';
+import '../styles/sequenceDrag.css';
+import { SequenceLibrary } from './SequenceLibrary';
 
 function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -35,6 +38,9 @@ export function Sequence({ onExportSequence }: {
   const setMode = useProjectStore(s => s.setPreviewMode);
   const previewMode = useProjectStore(s => s.previewMode);
   const invalid = useProjectStore(s => s.invalidClipIds);
+  const drag = useSequenceDrag(project?.sequence.length ?? 0, reorder, clipId => {
+    if (project?.clips.some(clip => clip.id === clipId)) append(clipId);
+  });
 
   // Index of the clip currently playing in sequence preview — used to apply
   // the "shine" highlight below. -1 when we're not previewing a sequence.
@@ -50,22 +56,13 @@ export function Sequence({ onExportSequence }: {
 
   if (!project) return <span className="dim">Sequence</span>;
 
-  function onDragOver(e: React.DragEvent) { e.preventDefault(); }
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    const clipId = e.dataTransfer.getData('text/clipId');
-    const fromIdxRaw = e.dataTransfer.getData('text/seqIndex');
-    if (fromIdxRaw) {
-      // ignore here; reorder handled per-tile
-    } else if (clipId) {
-      append(clipId);
-    }
-  }
-
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}
-      onDragOver={onDragOver} onDrop={onDrop}>
-      <div style={{ display: 'flex', gap: 6, flex: 1, minHeight: 64, alignItems: 'center', flexWrap: 'nowrap', overflowX: 'auto' }}>
+    <div className="sequence-editor">
+    <SequenceLibrary />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0 }}>
+      <div ref={drag.stripRef} className="sequence-strip" aria-label="Sequence clips"
+        title="Drag clips to reorder; drop between clips"
+        onDragEnter={drag.over} onDragOver={drag.over} onDrop={drag.drop} onDragLeave={drag.leave}>
         {project.sequence.length === 0 && <span className="dim">Drag clips here to build a sequence</span>}
         {project.sequence.map((entry, i) => {
           const clip = project.clips.find(c => c.id === entry.clipId);
@@ -75,24 +72,13 @@ export function Sequence({ onExportSequence }: {
           const stripeColour = clip ? sourceColour(project, clip.sourceId) : 'var(--border)';
           return (
             <div key={i}
+              data-sequence-index={i}
               draggable
-              onDragStart={e => e.dataTransfer.setData('text/seqIndex', String(i))}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => {
-                e.preventDefault();
-                e.stopPropagation();
-                const fromIdxRaw = e.dataTransfer.getData('text/seqIndex');
-                if (fromIdxRaw !== '') {
-                  const from = parseInt(fromIdxRaw, 10);
-                  if (!Number.isNaN(from) && from !== i) reorder(from, i);
-                  return;
-                }
-                const clipId = e.dataTransfer.getData('text/clipId');
-                if (clipId) append(clipId);
-              }}
+              onDragStart={e => drag.start(e, i)}
+              onDragEnd={drag.end}
               onClick={() => !isInvalid && setMode({ kind: 'sequence', index: i })}
               title="Click to play from here · drag to reorder"
-              className={`seq-chip${isPlaying ? ' seq-chip-playing' : ''}`}
+              className={`seq-chip${isPlaying ? ' seq-chip-playing' : ''}${drag.gap === i ? ' seq-drop-before' : ''}${drag.gap === project.sequence.length && i === project.sequence.length - 1 ? ' seq-drop-after' : ''}`}
               style={{
                 padding: '6px 6px 6px 10px',
                 background: isInvalid ? 'var(--danger)' : 'var(--accent-2)',
@@ -101,7 +87,7 @@ export function Sequence({ onExportSequence }: {
                 borderRadius: 5,
                 cursor: isInvalid ? 'default' : 'grab',
                 whiteSpace: 'nowrap',
-                opacity: isInvalid ? 0.6 : 1,
+                opacity: drag.dragging === i ? 0.45 : isInvalid ? 0.6 : 1,
                 display: 'flex', alignItems: 'center', gap: 6,
                 transition: 'background-color 150ms ease, border-color 150ms ease, transform 120ms ease',
                 color: isInvalid ? 'var(--text)' : '#d8f9b3',
@@ -109,6 +95,7 @@ export function Sequence({ onExportSequence }: {
               }}
               onMouseEnter={e => !isInvalid && !isPlaying && (e.currentTarget.style.transform = 'translateY(-1px)')}
               onMouseLeave={e => !isPlaying && (e.currentTarget.style.transform = 'translateY(0)')}>
+              <span className="sequence-drag-handle" aria-hidden="true">⋮⋮</span>
               <span className="dim" style={{ fontSize: 11 }}>{i + 1}.</span>
               <span>{clip?.name ?? '???'}</span>
               <button
@@ -160,6 +147,7 @@ export function Sequence({ onExportSequence }: {
         title="Remove all clips from the sequence (clips themselves are kept)">
         Clear
       </button>
+    </div>
     </div>
   );
 }

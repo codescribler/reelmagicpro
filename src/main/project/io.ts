@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import type { Project, Clip, Bookmark, SourceMeta } from '../../shared/types';
 import { parseAndClampProject, ParseResult } from './schema';
 import { projectUsesMultipleSources } from '../../shared/resolveSource';
+import { syncActiveSequence } from '../../shared/namedSequences';
 
 // Strip the in-memory project down to its file shape. v1 (single
 // `sourceVideo`, no `sources`, no per-clip/bookmark `sourceId`s) is used
@@ -10,6 +11,9 @@ import { projectUsesMultipleSources } from '../../shared/resolveSource';
 // new code. v2 (`sources` array, `sourceId`s as needed) is used once the
 // user adds a second source or any explicit reference exists.
 export function serializeProject(project: Project): unknown {
+  project = syncActiveSequence(project);
+  const named = project.namedSequences?.length
+    ? { namedSequences: project.namedSequences, activeSequenceId: project.activeSequenceId } : {};
   if (projectUsesMultipleSources(project)) {
     // v2 shape — `sources` is canonical, `sourceVideo` is omitted.
     const clips: Clip[] = project.clips.map(c => ({ ...c }));
@@ -20,6 +24,7 @@ export function serializeProject(project: Project): unknown {
       sources: project.sources,
       clips,
       sequence: project.sequence,
+      ...named,
       bookmarks,
       sequenceBackingTrack: project.sequenceBackingTrack,
       sequenceBrightness: project.sequenceBrightness,
@@ -44,6 +49,7 @@ export function serializeProject(project: Project): unknown {
     sourceVideo: single,
     clips,
     sequence: project.sequence,
+    ...named,
     bookmarks,
     sequenceBackingTrack: project.sequenceBackingTrack,
     sequenceBrightness: project.sequenceBrightness,

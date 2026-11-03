@@ -1,5 +1,6 @@
 import path from 'path';
 import { musicFilter } from './musicFilter';
+import { dynamicZoomFilter } from './dynamicZoomFilter';
 import { markerForDisplay } from '../../shared/pitchMarker';
 import type { Clip, SourceMeta, FocusMarker, BackingTrack } from '../../shared/types';
 import type { ReelFramingSample } from '../../shared/instagramFraming';
@@ -259,18 +260,19 @@ function ovalGeq(
 function labelDrawtext(
   color: string, label: string, ph: number, pw: number,
   xExpr: string, yExpr: string, enable: string,
+  labelScale = 1,
 ): string {
   const text = escapeDrawtextLabel(label);
-  const fontSize = Math.max(20, Math.round(ph * 0.16));
+  const fontSize = Math.max(1, Math.round(Math.max(20, Math.round(ph * 0.16)) * labelScale));
   // Centre the label horizontally on the box and place it just below.
   // text_w is a runtime variable drawtext fills in with the rendered
   // string's pixel width.
   const textX = `(${xExpr})+${fmt(pw)}/2-text_w/2`;
-  const textY = `(${yExpr})+${fmt(ph)}+8`;
+  const textY = `(${yExpr})+${fmt(ph)}+${fmt(8 * labelScale)}`;
   return `drawtext=fontfile='${fontFilePath()}':text='${text}'`
     + `:x='${textX}':y='${textY}'`
     + `:fontcolor=${color}:fontsize=${fontSize}`
-    + `:box=1:boxcolor=black@0.6:boxborderw=4:${enable}`;
+    + `:box=1:boxcolor=black@0.6:boxborderw=${Math.max(1, Math.round(4 * labelScale))}:${enable}`;
 }
 
 function buildMarkerFilters(clip: Clip, source: SourceMeta): string {
@@ -332,7 +334,7 @@ function buildMarkerFilters(clip: Clip, source: SourceMeta): string {
       if (m.label) {
         // drawtext re-evaluates x/y per frame, so a piecewise expression gives
         // smooth label motion that follows the marker (same for both shapes).
-        result += ',' + labelDrawtext(m.color, m.label, ph, pw, xTLExpr, yTLExpr, enable);
+        result += ',' + labelDrawtext(m.color, m.label, ph, pw, xTLExpr, yTLExpr, enable, m.labelScale);
       }
       return result;
     }
@@ -351,7 +353,7 @@ function buildMarkerFilters(clip: Clip, source: SourceMeta): string {
       result = boxStamp(m.color, xVal, yVal, pw, ph, enable);
     }
     if (m.label) {
-      result += ',' + labelDrawtext(m.color, m.label, ph, pw, fmt(xVal), fmt(yVal), enable);
+      result += ',' + labelDrawtext(m.color, m.label, ph, pw, fmt(xVal), fmt(yVal), enable, m.labelScale);
     }
     return result;
   }).join(',');
@@ -480,13 +482,24 @@ export function buildInstagramOutroFfmpegArgs(
   return [...head, ...audioInput, ...fc, ...map, ...enc, outputPath];
 }
 
+function buildPictureFilter(clip: Clip, source: SourceMeta, markerFilters: string): string {
+  if (clip.zoomPath?.length) {
+    // Burn annotations into source pixels so they inherit the moving camera.
+    const fullFrame = { x: 0, y: 0, width: source.width, height: source.height };
+    const markers = buildMarkerFilters({ ...clip, zoom: fullFrame }, source);
+    return (markers ? `${markers},` : '') + dynamicZoomFilter(clip.zoomPath, source, clip.out - clip.in);
+  }
+  const z = clip.zoom;
+  return `crop=${fmt(z.width)}:${fmt(z.height)}:${fmt(z.x)}:${fmt(z.y)},scale=${source.width}:${source.height}`
+    + (markerFilters ? `,${markerFilters}` : '');
+}
+
 export function buildClipFfmpegArgs(
   clip: Clip,
   source: SourceMeta,
   outputPath: string,
   opts?: { forceSilentAudio?: boolean },
 ): string[] {
-  const { x, y, width, height } = clip.zoom;
   // Use PTS-STARTPTS so the output's first frame has timestamp 0 regardless of
   // where -ss landed on a keyframe. Some players (notably older VLC builds)
   // misbehave on second playback when the file's first frame has a non-zero
@@ -496,7 +509,8 @@ export function buildClipFfmpegArgs(
   // Watermark is placed AFTER markers so it sits on top of any focus marker
   // that happens to overlap the top-left corner — branding stays visible.
   const watermark = watermarkFilter(source);
-  const videoFilter = `[0:v]crop=${fmt(width)}:${fmt(height)}:${fmt(x)}:${fmt(y)},scale=${source.width}:${source.height}${markerFilters ? ',' + markerFilters : ''},${watermark}${brightnessFilter(clip.brightness)},setpts=${setpts}[v]`;
+  const picture = buildPictureFilter(clip, source, markerFilters);
+  const videoFilter = `[0:v]${picture},${watermark}${brightnessFilter(clip.brightness)},setpts=${setpts}[v]`;
 
   const head = ['-y', '-ss', fmt(clip.in), '-to', fmt(clip.out), '-i', source.path];
   const hasBacking = !!clip.backingTrack && clip.backingTrack.path.length > 0;
@@ -557,7 +571,6 @@ export function buildInstagramClipFfmpegArgs(
   outputPath: string,
   opts?: { forceSilentAudio?: boolean },
 ): string[] {
-  const z = clip.zoom;
   const side = reelCropSide(source);
   const cropY = (source.height - side) / 2; // 0 for landscape (side === srcH)
   const xPts = samples.map(s => ({ t: s.t, v: s.cx - side / 2 }));
@@ -570,9 +583,7 @@ export function buildInstagramClipFfmpegArgs(
   const igWatermark = instagramWatermarkFilter(INSTAGRAM_REEL_WIDTH, INSTAGRAM_REEL_HEIGHT);
   const padY = (INSTAGRAM_REEL_HEIGHT - INSTAGRAM_REEL_WIDTH) / 2;
 
-  const videoFilter = `[0:v]crop=${fmt(z.width)}:${fmt(z.height)}:${fmt(z.x)}:${fmt(z.y)}`
-    + `,scale=${source.width}:${source.height}`
-    + (markerFilters ? `,${markerFilters}` : '')
+  const videoFilter = `[0:v]${buildPictureFilter(clip, source, markerFilters)}`
     + `,crop=${fmt(side)}:${fmt(side)}:${xExpr}:${fmt(cropY)}`
     + `,scale=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_WIDTH}`
     + `,pad=${INSTAGRAM_REEL_WIDTH}:${INSTAGRAM_REEL_HEIGHT}:0:${fmt(padY)}:color=black`

@@ -21,6 +21,16 @@ export interface ZoomRect {
   height: number;
 }
 
+export interface CameraView {
+  cx: number; // centre in source pixels
+  cy: number;
+  zoom: number; // 1 = full source frame
+}
+
+export interface CameraPoint extends CameraView {
+  t: number; // clip-relative source seconds, independent of playback speed
+}
+
 export interface FocusMarkerPathPoint {
   t: number;   // clip-relative seconds (0 = clip.in)
   cx: number;  // centre x in source pixels
@@ -44,6 +54,7 @@ export interface FocusMarker {
   pitchOpacity?: number; // shaded pitch marker opacity, 0–1 (default 0.15)
   smoothing?: number; // additional smoothing window in seconds (0 = off)
   label?: string;  // optional caption rendered under the box (preview + export)
+  labelScale?: number; // text-size multiplier, 0.1–1 (default 1)
   // Optional motion track. When present, the marker's centre is interpolated
   // along this path; x/y above are ignored. The list is sorted by t ascending.
   // Times are clip-relative (t=0 corresponds to clip.in).
@@ -94,6 +105,7 @@ export interface Clip {
   out: number;
   speed: number;
   zoom: ZoomRect;
+  zoomPath?: CameraPoint[]; // recorded camera; takes precedence over the fixed crop
   focusMarkers: FocusMarker[];
   backingTrack?: BackingTrack;
   // Per-clip luma offset. -0.5 = very dark, 0 = no change, +0.5 = very bright.
@@ -111,6 +123,14 @@ export interface Clip {
 
 export interface SequenceEntry {
   clipId: string;
+}
+
+export interface NamedSequence {
+  id: string;
+  name: string;
+  entries: SequenceEntry[];
+  backingTrack?: BackingTrack;
+  brightness?: number;
 }
 
 export interface Bookmark {
@@ -136,6 +156,8 @@ export interface Project {
   sources: SourceVideo[];
   clips: Clip[];
   sequence: SequenceEntry[];
+  namedSequences?: NamedSequence[];
+  activeSequenceId?: string;
   bookmarks: Bookmark[];
   // Sequence-wide backing track. Overrides every clip's own backing track when
   // exporting/previewing the sequence — the user picks one song for the whole

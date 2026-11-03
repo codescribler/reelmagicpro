@@ -1,0 +1,17 @@
+.sequence-editor { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; }
+.sequence-library { min-width: 0; }
+.sequence-library-row, .sequence-name-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sequence-library-row button { font-size: 11px; padding: 4px 8px; }
+.sequence-library-label, .sequence-name-form label { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.sequence-library-label select, .sequence-name-form input {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.sequence-library-label select { width: 190px; max-width: 35vw; }
+.sequence-library-help { color: var(--muted); font-size: 11px; flex: 1; }
+.sequence-name-form { padding: 8px 0; }
+.sequence-name-form input { width: 220px; max-width: 35vw; }
+.sequence-name-form [role="alert"] { color: var(--danger); font-size: 12px; }

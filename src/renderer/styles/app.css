@@ -28,7 +28,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-rows: 32px 1fr 96px;
+  grid-template-rows: 32px minmax(0, 1fr) auto;
   grid-template-columns: 1fr 280px;
   grid-template-areas:
     "menubar menubar"

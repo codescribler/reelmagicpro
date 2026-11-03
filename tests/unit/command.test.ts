@@ -16,6 +16,20 @@ const baseClip: Clip = {
   focusMarkers: [],
 };
 
+test.each([[false, false], [true, false], [false, true], [true, true]])(
+  'reduces player label text in export (tracked=%s, dynamic zoom=%s)', (tracked, dynamic) => {
+    const marker = { id: 'text', x: 100, y: 200, width: 100, height: 100,
+      in: 10, out: 20, color: 'yellow', label: 'Player 7', labelScale: 0.25,
+      path: tracked ? [{ t: 0, cx: 150, cy: 250 }, { t: 10, cx: 300, cy: 250 }] : undefined };
+    const args = buildClipFfmpegArgs({ ...baseClip, focusMarkers: [marker],
+      zoomPath: dynamic ? [{ t: 0, cx: 960, cy: 540, zoom: 4 }] : undefined,
+    }, source, '/out.mp4');
+    const filter = args[args.indexOf('-filter_complex') + 1]!;
+    expect(filter).toContain(':fontcolor=yellow:fontsize=5:');
+    expect(filter).toContain('boxborderw=1:');
+  },
+);
+
 test.each([undefined, 0, 0.2, 1])('pitch shading blends footage with opacity %s', pitchOpacity => {
   const args = buildClipFfmpegArgs({ ...baseClip, focusMarkers: [{
     id: 'pitch', x: 100, y: 200, width: 100, height: 160,

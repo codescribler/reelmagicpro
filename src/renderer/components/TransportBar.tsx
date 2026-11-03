@@ -140,6 +140,29 @@ export function TransportBar({ videoRef }: { videoRef: React.RefObject<HTMLVideo
       className="transport-bar"
       onMouseDown={e => e.stopPropagation()}
       onClick={e => e.stopPropagation()}>
+      {!isMarking ? (
+        <button
+          className="transport-btn transport-clip-btn"
+          onClick={onStartClip}
+          title="Mark the start of a clip at the current playhead (shortcut: [)">
+          [ Start clip
+        </button>
+      ) : (
+        <>
+          <button
+            className="transport-btn transport-clip-btn is-active"
+            onClick={onEndClip}
+            title="Mark the end of the clip and save it (shortcut: ])">
+            End clip ]
+          </button>
+          <button
+            className="transport-btn"
+            onClick={cancelMarking}
+            title="Discard the in-progress clip (Esc)">
+            ×
+          </button>
+        </>
+      )}
       <button
         className="transport-btn play-btn"
         onClick={togglePlay}
@@ -169,29 +192,6 @@ export function TransportBar({ videoRef }: { videoRef: React.RefObject<HTMLVideo
         </div>
       </div>
       <span className="transport-time">{fmtTime(localTime)} / {fmtTime(rangeDuration)}</span>
-      {!isMarking ? (
-        <button
-          className="transport-btn transport-clip-btn"
-          onClick={onStartClip}
-          title="Mark the start of a clip at the current playhead (shortcut: [)">
-          [ Start clip
-        </button>
-      ) : (
-        <>
-          <button
-            className="transport-btn transport-clip-btn is-active"
-            onClick={onEndClip}
-            title="Mark the end of the clip and save it (shortcut: ])">
-            End clip ]
-          </button>
-          <button
-            className="transport-btn"
-            onClick={cancelMarking}
-            title="Discard the in-progress clip (Esc)">
-            ×
-          </button>
-        </>
-      )}
     </div>
   );
 }

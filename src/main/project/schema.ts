@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import type { Project, SourceVideo } from '../../shared/types';
 import { newSourceId, resolveSource } from '../../shared/resolveSource';
+import { normalizeZoomPath } from '../../shared/dynamicZoom';
+import { restoreActiveSequence } from '../../shared/namedSequences';
 
 const ZoomRectSchema = z.object({
   x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive(),
@@ -25,6 +27,7 @@ const FocusMarkerSchema = z.object({
   pitchOpacity: z.number().min(0).max(1).optional(),
   smoothing: z.number().min(0).max(1).optional(),
   label: z.string().optional(),
+  labelScale: z.number().min(0.1).max(1).optional(),
   path: z.array(FocusMarkerPathPointSchema).optional(),
   primary: z.boolean().optional(),
 });
@@ -65,6 +68,9 @@ const ClipSchema = z.object({
   out: z.number().min(0),
   speed: z.number(),
   zoom: ZoomRectSchema,
+  zoomPath: z.array(z.object({
+    t: z.number().finite(), cx: z.number().finite(), cy: z.number().finite(), zoom: z.number().finite(),
+  })).optional(),
   focusMarkers: z.array(FocusMarkerSchema).default([]),
   backingTrack: BackingTrackSchema.optional(),
   brightness: z.number().min(-1).max(1).optional(),
@@ -72,6 +78,10 @@ const ClipSchema = z.object({
   reelFraming: ReelFramingSchema.optional(),
 });
 const SequenceEntrySchema = z.object({ clipId: z.string().min(1) });
+const NamedSequenceSchema = z.object({
+  id: z.string().min(1), name: z.string().trim().min(1).max(80), entries: z.array(SequenceEntrySchema),
+  backingTrack: BackingTrackSchema.optional(), brightness: z.number().min(-1).max(1).optional(),
+});
 const BookmarkSchema = z.object({
   id: z.string().min(1),
   time: z.number().min(0),
@@ -91,6 +101,9 @@ const ProjectSchema = z.object({
   sources: z.array(SourceVideoSchema).optional(),
   clips: z.array(ClipSchema),
   sequence: z.array(SequenceEntrySchema),
+  namedSequences: z.array(NamedSequenceSchema).refine(sequences => new Set(sequences.map(s => s.id)).size === sequences.length,
+    'Sequence ids must be unique').optional(),
+  activeSequenceId: z.string().optional(),
   // Default keeps older project files (saved before bookmarks existed) loadable.
   bookmarks: z.array(BookmarkSchema).default([]),
   sequenceBackingTrack: BackingTrackSchema.optional(),
@@ -154,6 +167,7 @@ export function parseAndClampProject(raw: unknown): ParseResult {
     if (z.width > sw) { z.x = 0; z.width = sw; }
     if (z.height > sh) { z.y = 0; z.height = sh; }
     next.zoom = z;
+    if (next.zoomPath) next.zoomPath = normalizeZoomPath(next.zoomPath, src, next.out - next.in);
     if (next.speed < 0.25) next.speed = 0.25;
     if (next.speed > 4) next.speed = 4;
     if (next.in >= next.out) invalidClipIds.push(next.id);
@@ -200,6 +214,7 @@ export function parseAndClampProject(raw: unknown): ParseResult {
     sources,
     clips,
     sequence: parsed.sequence,
+    ...(parsed.namedSequences?.length ? { namedSequences: parsed.namedSequences, activeSequenceId: parsed.activeSequenceId } : {}),
     bookmarks,
     sequenceBackingTrack: parsed.sequenceBackingTrack,
     sequenceBrightness: parsed.sequenceBrightness,
@@ -209,7 +224,7 @@ export function parseAndClampProject(raw: unknown): ParseResult {
     })() : undefined,
   };
 
-  return { project, warnings, invalidClipIds };
+  return { project: restoreActiveSequence(project), warnings, invalidClipIds };
 }
 
 // Verify the in-memory project as a smoke-test against bad in-memory state
