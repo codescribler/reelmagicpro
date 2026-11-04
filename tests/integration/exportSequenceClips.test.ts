@@ -37,10 +37,11 @@ test('exports both formats in sequence order with distinct names and each clip s
   const result = await exportSequenceClips({ ...args(), onProgress: p => progress.push(p) });
   expect(result.ok).toBe(true);
   expect(path.basename(result.outputDirectory!)).toBe('_CON');
-  expect(result.outputPaths!.map(file => path.basename(file))).toEqual([
-    '01 - Same_ clip__standard.mp4', '01 - Same_ clip__instagram.mp4',
-    '02 - Same_ clip__standard.mp4', '02 - Same_ clip__instagram.mp4',
-    '03 - Same_ clip__standard.mp4', '03 - Same_ clip__instagram.mp4',
+  expect(fs.readdirSync(result.outputDirectory!).sort()).toEqual(['Instagram', 'Standard']);
+  expect(result.outputPaths!.map(file => path.relative(result.outputDirectory!, file).split(path.sep).join('/'))).toEqual([
+    'Standard/01 - Same_ clip__standard.mp4', 'Instagram/01 - Same_ clip__instagram.mp4',
+    'Standard/02 - Same_ clip__standard.mp4', 'Instagram/02 - Same_ clip__instagram.mp4',
+    'Standard/03 - Same_ clip__standard.mp4', 'Instagram/03 - Same_ clip__instagram.mp4',
   ]);
   const sizes = await Promise.all(result.outputPaths!.map(file => probeVideo(file)));
   expect(sizes.map(s => [s.width, s.height])).toEqual([
@@ -62,18 +63,25 @@ test.each(['standard', 'instagram'] as const)('supports %s alone and a safe uniq
   expect(result.outputDirectory).not.toBe(existing);
   expect(fs.readFileSync(path.join(existing, 'keep.txt'), 'utf8')).toBe('keep');
   expect(result.outputPaths).toHaveLength(1);
+  expect(path.dirname(result.outputPaths![0])).toBe(result.outputDirectory);
   const video = await probeVideo(result.outputPaths![0]);
   expect([video.width, video.height]).toEqual(format === 'standard' ? [320, 240] : [1080, 1920]);
 });
 
-test('cancelling stops subsequent files and retains completed exports', async () => {
+test.each(['standard', 'both'] as const)('cancelling %s stops subsequent files and retains completed exports', async format => {
   const ctrl = new AbortController();
-  const result = await exportSequenceClips({ ...args(), format: 'standard', signal: ctrl.signal,
-    onProgress: p => { if (p.percent >= 100 / 3) ctrl.abort(); } });
+  const result = await exportSequenceClips({ ...args(), format, signal: ctrl.signal,
+    onProgress: p => { if (p.percent >= 100 / (format === 'both' ? 6 : 3)) ctrl.abort(); } });
   expect(result).toMatchObject({ ok: false, error: 'Cancelled' });
   expect(result.outputPaths).toHaveLength(1);
   expect(fs.existsSync(result.outputPaths![0])).toBe(true);
-  expect(fs.readdirSync(result.outputDirectory!)).toHaveLength(1);
+  if (format === 'both') {
+    expect(path.dirname(result.outputPaths![0])).toBe(path.join(result.outputDirectory!, 'Standard'));
+    expect(fs.readdirSync(path.join(result.outputDirectory!, 'Standard'))).toHaveLength(1);
+    expect(fs.readdirSync(path.join(result.outputDirectory!, 'Instagram'))).toHaveLength(0);
+  } else {
+    expect(fs.readdirSync(result.outputDirectory!)).toHaveLength(1);
+  }
 });
 
 test('failure identifies the clip and retains previously completed files', async () => {

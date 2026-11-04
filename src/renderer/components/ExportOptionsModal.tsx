@@ -96,7 +96,7 @@ export function ExportOptionsModal(props: {
           </div>
         </div>
         {format === 'both' && <div className="dim" style={{ fontSize: 12 }}>
-          {individual ? 'Each clip gets _standard and _instagram versions.'
+          {individual ? 'Saves Standard and Instagram versions in separate subfolders.'
             : 'Saves two files with _standard and _instagram suffixes. Exports run one after the other.'}
         </div>}
         {individual && context.kind === 'sequence' && <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>

@@ -5,6 +5,8 @@ import { exportTargets } from '../../shared/exportTargets';
 import { resolveSource } from '../../shared/resolveSource';
 import type { ExportSequenceClipsArgs, ExportProgress, ExportResult } from '../../shared/types';
 
+const FORMAT_FOLDERS = { standard: 'Standard', instagram: 'Instagram' } as const;
+
 function safeName(value: string, fallback: string): string {
   const clean = Array.from(value.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_'))
     .slice(0, 80).join('').trim().replace(/[. ]+$/, '');
@@ -46,11 +48,18 @@ export async function exportSequenceClips(opts: ExportSequenceClipsArgs & {
     });
     if (signal?.aborted) return failed('Cancelled');
     outputDirectory = await createFolder(opts.directory, safeName(opts.sequenceName, 'Sequence clips'));
+    if (opts.format === 'both') {
+      await Promise.all(Object.values(FORMAT_FOLDERS).map(folder => fs.mkdir(path.join(outputDirectory!, folder))));
+    }
     const digits = Math.max(2, String(entries.length).length);
     const jobs = entries.flatMap(({ clip, source }, index) => {
       const filename = `${String(index + 1).padStart(digits, '0')} - ${safeName(clip.name, 'Clip')}.mp4`;
       return exportTargets(path.join(outputDirectory!, filename), opts.format)
-        .map(target => ({ ...target, clip, source }));
+        .map(target => ({ ...target, clip, source,
+          outputPath: opts.format === 'both'
+            ? path.join(outputDirectory!, FORMAT_FOLDERS[target.format], path.basename(target.outputPath))
+            : target.outputPath,
+        }));
     });
     let percent = 0;
     for (const [index, job] of jobs.entries()) {
