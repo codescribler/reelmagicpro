@@ -26,7 +26,8 @@ export function ExportProgressModal() {
     }}>
       <div style={{
         background: 'var(--panel)',
-        padding: 24, borderRadius: 10, minWidth: 360,
+        padding: 24, borderRadius: 10, width: 560, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto',
+        overflowWrap: 'anywhere',
         border: '1px solid var(--accent-glow)',
         boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
       }}>
@@ -38,12 +39,19 @@ export function ExportProgressModal() {
             {label && <div>{label}</div>}
             {run.phase === 'concatenating' ? 'Concatenating…' : `Item ${run.currentItem} of ${run.totalItems}`}
             {' '}— {Math.round(run.percent)}%
+            {run.message && <div style={{ marginTop: 4 }}>{run.message}</div>}
           </div>
         )}
         {result?.ok && <div className="dim" style={{ marginBottom: 8 }}>{result.outputPath}</div>}
+        {result?.outputDirectory && <div className="dim" style={{ marginBottom: 12 }}>
+          <div>{result.outputPaths?.length ?? 0} files saved in:</div>
+          <div>{result.outputDirectory}</div>
+        </div>}
+        <div style={{ maxHeight: 200, overflowY: 'auto' }}>
         {result?.outputPaths?.map(file => <div key={file} className="dim" style={{ marginBottom: 8 }}>
           {!result.ok && 'Saved: '}{file}
         </div>)}
+        </div>
         {result?.ok === false && <div className="dim" style={{ marginBottom: 8, color: isCancelled ? 'var(--muted)' : 'var(--danger)' }}>{result.error}</div>}
         <div style={{ height: 6, background: 'var(--panel-2)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
           <div style={{

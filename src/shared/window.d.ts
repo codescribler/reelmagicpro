@@ -5,6 +5,7 @@ import type {
   LoadProjectResult,
   ExportClipArgs,
   ExportSequenceArgs,
+  ExportSequenceClipsArgs,
   ExportProgress,
   ExportResult,
   DownloadVeoVideoArgs,
@@ -21,6 +22,8 @@ declare global {
       loadProject: (path?: string) => Promise<LoadProjectResult>;
       exportClip: (args: ExportClipArgs) => Promise<ExportResult>;
       exportSequence: (args: ExportSequenceArgs) => Promise<ExportResult>;
+      exportSequenceClips: (args: ExportSequenceClipsArgs) => Promise<ExportResult>;
+      chooseExportDirectory: () => Promise<{ ok: boolean; path?: string }>;
       cancelExport: (runId: string) => Promise<{ ok: boolean }>;
       checkPath: (p: string) => Promise<{ exists: boolean }>;
       chooseExportPath: (suggestedName: string, both?: boolean) => Promise<{ ok: boolean; path?: string }>;

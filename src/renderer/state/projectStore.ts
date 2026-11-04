@@ -122,12 +122,12 @@ export interface State extends NamedSequenceActions {
   endMarking: (time: number) => void;
   cancelMarking: () => void;
 
-  activeRun: { runId: string; phase: ExportProgress['phase']; percent: number; currentItem: number; totalItems: number } | null;
+  activeRun: ExportProgress | null;
   exportLabel: string | null;
-  exportResult: { ok: boolean; outputPath?: string; outputPaths?: string[]; error?: string } | null;
+  exportResult: { ok: boolean; outputPath?: string; outputPaths?: string[]; outputDirectory?: string; error?: string } | null;
   startRun: (runId: string) => void;
   setProgress: (p: ExportProgress) => void;
-  setExportResult: (r: { ok: boolean; outputPath?: string; outputPaths?: string[]; error?: string } | null) => void;
+  setExportResult: (r: { ok: boolean; outputPath?: string; outputPaths?: string[]; outputDirectory?: string; error?: string } | null) => void;
   clearRun: () => void;
 }
 

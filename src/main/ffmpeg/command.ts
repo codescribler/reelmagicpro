@@ -541,6 +541,10 @@ export function buildClipFfmpegArgs(
   const enc = [
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '20',
     '-pix_fmt', 'yuv420p',
+    // Recorded zoom uses zoompan's time base; static crops inherit the input's.
+    // Give both the same output rate/time base before stream-copy concat,
+    // otherwise fractional-rate footage jumps backwards at their joins.
+    '-r', fmt(source.fps), '-vsync', 'cfr',
     '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
     '-movflags', '+faststart',
     '-progress', 'pipe:2',

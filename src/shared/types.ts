@@ -184,6 +184,8 @@ export interface ExportProgress {
 export interface ExportResult {
   ok: boolean;
   outputPath?: string;
+  outputPaths?: string[];
+  outputDirectory?: string;
   error?: string;
 }
 
@@ -193,6 +195,8 @@ export type IpcChannel =
   | 'app:loadProject'
   | 'app:exportClip'
   | 'app:exportSequence'
+  | 'app:exportSequenceClips'
+  | 'app:chooseExportDirectory'
   | 'app:cancelExport'
   | 'app:exportProgress'; // main → renderer
 
@@ -237,6 +241,16 @@ export interface ExportSequenceArgs {
   instagramOutroPath?: string;
   sequenceBackingTrack?: BackingTrack;
   sequenceBrightness?: number;
+}
+
+export interface ExportSequenceClipsArgs {
+  runId: string;
+  clips: Clip[];
+  sequence: SequenceEntry[];
+  sources: SourceVideo[];
+  directory: string;
+  sequenceName: string;
+  format: ExportFormat | 'both';
 }
 
 // "Paste a Veo link" flow: app fetches the page, scrapes the video URL,

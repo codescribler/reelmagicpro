@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   OpenSourceVideoResult, SaveProjectArgs, SaveProjectResult,
-  LoadProjectResult, ExportClipArgs, ExportSequenceArgs, ExportProgress, ExportResult,
+  LoadProjectResult, ExportClipArgs, ExportSequenceArgs, ExportSequenceClipsArgs, ExportProgress, ExportResult,
   DownloadVeoVideoArgs, VeoDownloadProgress, VeoDownloadResult,
   LicenceState,
 } from '../shared/types';
@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('reelmagic', {
     ipcRenderer.invoke('app:exportClip', args),
   exportSequence: (args: ExportSequenceArgs): Promise<ExportResult> =>
     ipcRenderer.invoke('app:exportSequence', args),
+  exportSequenceClips: (args: ExportSequenceClipsArgs): Promise<ExportResult> =>
+    ipcRenderer.invoke('app:exportSequenceClips', args),
+  chooseExportDirectory: (): Promise<{ ok: boolean; path?: string }> =>
+    ipcRenderer.invoke('app:chooseExportDirectory'),
   cancelExport: (runId: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('app:cancelExport', runId),
   checkPath: (p: string): Promise<{ exists: boolean }> => ipcRenderer.invoke('app:checkPath', p),

@@ -3,11 +3,12 @@ import fs from 'fs/promises';
 import { exportTargets } from '../shared/exportTargets';
 import { probeVideo } from './ffmpeg/probe';
 import { exportClip, exportSequence } from './ffmpeg/exporter';
+import { exportSequenceClips } from './ffmpeg/exportSequenceClips';
 import { saveProject, loadProject } from './project/io';
 import { downloadVeoVideo } from './veo/download';
 import type {
   OpenSourceVideoResult, SaveProjectArgs, SaveProjectResult,
-  LoadProjectResult, ExportClipArgs, ExportSequenceArgs, ExportProgress,
+  LoadProjectResult, ExportClipArgs, ExportSequenceArgs, ExportSequenceClipsArgs, ExportProgress,
   DownloadVeoVideoArgs, VeoDownloadProgress, VeoDownloadResult,
 } from '../shared/types';
 
@@ -132,6 +133,26 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     })();
     activeRuns.set(args.runId, { ctrl, finished: work });
     return work;
+  });
+
+  ipcMain.handle('app:exportSequenceClips', async (_e, args: ExportSequenceClipsArgs) => {
+    const ctrl = new AbortController();
+    const work = exportSequenceClips({ ...args, signal: ctrl.signal, onProgress: sendProgress })
+      .finally(() => activeRuns.delete(args.runId));
+    activeRuns.set(args.runId, { ctrl, finished: work });
+    return work;
+  });
+
+  ipcMain.handle('app:chooseExportDirectory', async () => {
+    const win = getWindow();
+    if (!win) return { ok: false };
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Choose where to create the sequence folder',
+      buttonLabel: 'Use this location',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false };
+    return { ok: true, path: result.filePaths[0] };
   });
 
   ipcMain.handle('app:chooseOutroFile', async () => {

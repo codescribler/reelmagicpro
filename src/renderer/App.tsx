@@ -17,6 +17,7 @@ import { EmptyState } from './components/EmptyState';
 import { LicenceGate } from './components/LicenceGate';
 import { useLicenceStore, useLicenceSubscription } from './state/licence';
 import { loadProjectInteractive } from './state/loadProject';
+import { exportSequenceClipsInteractive } from './state/exportSequenceClips';
 import logoUrl from './assets/reelmagic.png';
 
 function fmtTime(s: number): string {
@@ -227,7 +228,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
       ? project.clips.find(c => c.id === firstEntry.clipId)
       : undefined;
     const source = project.sources[0] ?? project.sourceVideo;
-    setExportOptions({ kind: 'sequence', firstClip, source });
+    setExportOptions({ kind: 'sequence', firstClip, source, clipCount: project.sequence.length });
   }
 
   // Resolve the export-options dialog: on Continue, pick an output path and run
@@ -236,6 +237,10 @@ function Editor({ pastDue }: { pastDue: boolean }) {
     const ctx = exportOptions;
     setExportOptions(null);
     if (!ctx || !result.ok || !result.format || !project) return;
+    if (ctx.kind === 'sequence' && result.sequenceMode === 'individual') {
+      await exportSequenceClipsInteractive(project, result.format);
+      return;
+    }
     const out = await window.reelmagic.chooseExportPath(
       ctx.kind === 'clip' ? `${ctx.clip.name}.mp4`
         : `${(project.namedSequences?.find(sequence => sequence.id === project.activeSequenceId)?.name ?? 'sequence')
