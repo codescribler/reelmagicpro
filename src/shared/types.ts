@@ -39,6 +39,7 @@ export interface FocusMarkerPathPoint {
 
 export interface FocusMarker {
   id: string;
+  playerId?: string; // saved profile; label remains a snapshot for portable projects
   x: number;       // top-left in source pixels (used when path is empty)
   y: number;
   width: number;
@@ -135,11 +136,19 @@ export interface NamedSequence {
   brightness?: number;
 }
 
+export interface PlayerProfile {
+  id: string;
+  name: string;
+  shortcut: string; // unique lowercase letter; B is reserved for general bookmarks
+}
+
 export interface Bookmark {
   id: string;
   time: number;       // source-time seconds
   label?: string;     // optional user-given name
   createdAt: number;  // ms epoch — used for stable ordering of same-time bookmarks
+  playerId?: string;
+  playerName?: string; // snapshot keeps the list readable if the profile is removed
   // Owning source video. Same back-compat rule as Clip.sourceId — undefined
   // resolves to `project.sources[0]`.
   sourceId?: string;

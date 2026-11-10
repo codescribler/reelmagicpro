@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, Clip, SourceMeta, SourceVideo, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack, ReelFraming } from '../../shared/types';
+import type { Project, Clip, SourceMeta, SourceVideo, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack, ReelFraming, PlayerProfile } from '../../shared/types';
 import { newSourceId, resolveSource } from '../../shared/resolveSource';
 import { trimZoomPath } from '../../shared/dynamicZoom';
 import { pruneSequenceClips, restoreActiveSequence, syncActiveSequence } from '../../shared/namedSequences';
@@ -96,7 +96,7 @@ export interface State extends NamedSequenceActions {
   // field is deleted so saved projects stay minimal).
   setReelFraming: (clipId: string, framing: ReelFraming | undefined) => void;
 
-  addBookmark: (time: number) => void;
+  addBookmark: (time: number, player?: Pick<PlayerProfile, 'id' | 'name'>) => void;
   updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
   deleteBookmark: (id: string) => void;
 
@@ -601,7 +601,7 @@ export const useProjectStore = create<State>((set, get) => ({
     };
   })),
 
-  addBookmark: (time) => set(state => {
+  addBookmark: (time, player) => set(state => {
     if (!state.project) return state;
     // Attach the active source's id only when the project has multiple
     // sources — keeps single-source bookmark files clean and lets old
@@ -618,6 +618,7 @@ export const useProjectStore = create<State>((set, get) => ({
             id: newBookmarkId(),
             time: Math.max(0, time),
             createdAt: Date.now(),
+            ...(player ? { playerId: player.id, playerName: player.name } : {}),
             ...(sourceId ? { sourceId } : {}),
           },
         ],

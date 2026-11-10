@@ -14,6 +14,7 @@ const FocusMarkerPathPointSchema = z.object({
 });
 const FocusMarkerSchema = z.object({
   id: z.string().min(1),
+  playerId: z.string().min(1).optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().positive(),
@@ -89,6 +90,8 @@ const BookmarkSchema = z.object({
   time: z.number().min(0),
   label: z.string().optional(),
   createdAt: z.number(),
+  playerId: z.string().min(1).optional(),
+  playerName: z.string().optional(),
   sourceId: z.string().optional(),
 });
 // Project schema accepts v1 (single `sourceVideo`, no `sources`) or v2

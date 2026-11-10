@@ -2,6 +2,9 @@ import { exportTargets } from '../shared/exportTargets';
 import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from './state/projectStore';
 import { useSettings } from './state/settings';
+import { playerForShortcut, usePlayerProfiles } from './state/playerProfiles';
+import { PlayerProfilesModal } from './components/PlayerProfilesModal';
+import './styles/playerProfiles.css';
 import { previewClock } from './state/previewClock';
 import { keyToNudgeDelta } from './state/playhead';
 import { Preview } from './components/Preview';
@@ -46,6 +49,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
   const seqRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [playersOpen, setPlayersOpen] = useState(false);
   // Pending export awaiting a format choice. Set when the user hits Export;
   // cleared when the options dialog resolves. The chosen format (Standard or
   // Instagram/reel) is threaded into the actual export call.
@@ -55,6 +59,8 @@ function Editor({ pastDue }: { pastDue: boolean }) {
   // can read the latest value without re-attaching on every state change.
   const settingsOpenRef = useRef(false);
   settingsOpenRef.current = settingsOpen;
+  const shortcutsBlockedRef = useRef(false);
+  shortcutsBlockedRef.current = playersOpen || exportOptions !== null;
 
   useEffect(() => {
     const off = window.reelmagic.onExportProgress(p => useProjectStore.getState().setProgress(p));
@@ -76,12 +82,12 @@ function Editor({ pastDue }: { pastDue: boolean }) {
       const el = document.activeElement as HTMLElement | null;
       if (!el) return false;
       const tag = el.tagName;
-      return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
     }
     function onKey(e: KeyboardEvent) {
       if ((e.target as Element | null)?.closest('[data-moment-marker]')) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (settingsOpenRef.current) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      if (settingsOpenRef.current || shortcutsBlockedRef.current || document.querySelector('dialog[open]')) return;
       if (isTyping()) return;
       const st = useProjectStore.getState();
       if (!st.project) return;
@@ -89,9 +95,18 @@ function Editor({ pastDue }: { pastDue: boolean }) {
 
       if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
+        if (e.repeat) return;
         const t = previewClock.currentTime;
         st.addBookmark(t);
         setToast(`Bookmarked at ${fmtTime(t)}`);
+        return;
+      }
+      const player = playerForShortcut(usePlayerProfiles.getState().profiles, e);
+      if (player) {
+        e.preventDefault();
+        const t = previewClock.currentTime;
+        st.addBookmark(t, player);
+        setToast(`${player.name} bookmarked at ${fmtTime(t)}`);
         return;
       }
       // Clip-marking shortcuts. [ starts a mark at the playhead, ] ends and
@@ -279,11 +294,13 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         <EmptyState
           onOpenVideo={handleOpen}
           onOpenProject={loadProjectInteractive}
+          onManagePlayers={() => setPlayersOpen(true)}
         />
         {/* Settings is still reachable in case the user wants to tweak prefs
             before loading a video, but kept off-screen until invoked via
             keyboard or a future affordance. */}
         <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <PlayerProfilesModal open={playersOpen} onClose={() => setPlayersOpen(false)} />
       </>
     );
   }
@@ -325,6 +342,10 @@ function Editor({ pastDue }: { pastDue: boolean }) {
           </button>
         )}
         <button
+          onClick={() => setPlayersOpen(true)}
+          title="Manage saved player names and bookmark letters"
+        >Players</button>
+        <button
           onClick={() => setSettingsOpen(true)}
           style={pastDue ? undefined : { marginLeft: 'auto' }}
           title="Settings"
@@ -340,7 +361,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         <MusicAlignment />
       </div>
       <div className="side" ref={sideRef}>
-        <RightPanel onExport={runClipExport} />
+        <RightPanel onExport={runClipExport} onManagePlayers={() => setPlayersOpen(true)} />
       </div>
       {seqMode === 'full' && (
         <div className="seq" ref={seqRef}>
@@ -361,6 +382,7 @@ function Editor({ pastDue }: { pastDue: boolean }) {
         />
       )}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <PlayerProfilesModal open={playersOpen} onClose={() => setPlayersOpen(false)} />
       {toast && (
         <div className="toast" style={{
           position: 'fixed',

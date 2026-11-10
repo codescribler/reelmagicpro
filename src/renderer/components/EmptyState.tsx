@@ -7,9 +7,11 @@ import logoUrl from '../assets/reelmagic.png';
 export function EmptyState({
   onOpenVideo,
   onOpenProject,
+  onManagePlayers,
 }: {
   onOpenVideo: () => void;
   onOpenProject: (path?: string) => Promise<void>;
+  onManagePlayers?: () => void;
 }) {
   const paths = useRecentProjects(s => s.paths);
   const [opening, setOpening] = useState(false);
@@ -41,6 +43,7 @@ export function EmptyState({
         <button className="empty-state-secondary" disabled={opening} onClick={() => void openProject()}>
           Open a saved project
         </button>
+        {onManagePlayers && <button className="empty-state-secondary" onClick={onManagePlayers}>Manage saved players</button>}
         {paths.length > 0 && <section className="recent-projects" aria-label="Recent projects" aria-busy={opening}>
           <h2>Recent projects</h2>
           <ul>{paths.map(path => <li key={path}>

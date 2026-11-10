@@ -3,6 +3,7 @@ import { useProjectStore } from '../state/projectStore';
 import type { Clip, FocusMarker } from '../../shared/types';
 import { resolveSourceForClip } from '../../shared/resolveSource';
 import { MarkerAdjustments } from './MarkerAdjustments';
+import { PlayerNameField } from './PlayerNameField';
 
 const MARKER_COLORS = ['yellow', 'red', 'lime', 'cyan', 'magenta', 'orange', 'white'];
 
@@ -27,6 +28,7 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
   const togglePrimaryMarker = useProjectStore(s => s.togglePrimaryMarker);
   const setMode = useProjectStore(s => s.setPreviewMode);
   const project = useProjectStore(s => s.project);
+  const [newPlayer, setNewPlayer] = useState<Pick<FocusMarker, 'label' | 'playerId'>>({});
 
   // Identify which marker drives Instagram framing for this clip.
   // Explicit primary wins; otherwise the first marker is the implicit driver.
@@ -53,6 +55,7 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
     const h = Math.round(sh * 0.25);
     let m: FocusMarker = {
       id: newMarkerId(),
+      ...newPlayer,
       x: Math.round((sw - w) / 2),
       y: Math.round((sh - h) / 2),
       width: w,
@@ -80,9 +83,6 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
           <p className="dim" style={{ fontSize: 12, margin: '0 0 8px 0' }}>
             Tag a player in the video below. The tag follows them so the focus box can stay on them while they move.
           </p>
-          <button className="primary" onClick={handleAdd} title="Tag a player and follow them with the mouse">
-            + Tag a player
-          </button>
         </>
       ) : (
         <>
@@ -104,11 +104,15 @@ export function ClipFocusMarkers({ clip }: { clip: Clip }) {
               />
             ))}
           </div>
-          <button onClick={handleAdd} title="Tag another player">
-            + Tag another player
-          </button>
         </>
       )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <PlayerNameField value={newPlayer} onChange={setNewPlayer} label="Player to tag" />
+        <button className={clip.focusMarkers.length === 0 ? 'primary' : ''} onClick={handleAdd}
+          title="Tag a player and follow them with the mouse">
+          {clip.focusMarkers.length === 0 ? '+ Tag a player' : '+ Tag another player'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -218,16 +222,7 @@ function MarkerRow({ clip, marker, sourceWidth, sourceHeight, showPrimaryStar, i
             }}
           >★</button>
         )}
-        <input
-          placeholder="Label (e.g. Player 7)"
-          value={marker.label ?? ''}
-          onChange={e => onUpdate({ label: e.target.value })}
-          style={{
-            flex: 1, minWidth: 0, padding: '4px 6px',
-            background: 'var(--panel-2)', color: 'var(--text)',
-            border: '1px solid var(--border)', borderRadius: 3, fontSize: 12,
-          }}
-        />
+        <PlayerNameField value={marker} onChange={onUpdate} label="Tagged player" />
         <button onClick={onDelete} title="Delete this tag" style={{ flex: '0 0 auto' }}>×</button>
       </div>
       {marker.label && (

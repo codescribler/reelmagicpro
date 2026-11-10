@@ -3,6 +3,7 @@ import { useProjectStore } from '../state/projectStore';
 import { useSettings } from '../state/settings';
 import { previewClock } from '../state/previewClock';
 import { sourceColour } from '../lib/sourceColors';
+import { usePlayerProfiles } from '../state/playerProfiles';
 
 function fmt(s: number): string {
   const m = Math.floor(s / 60);
@@ -20,7 +21,7 @@ function findClosestId(list: { id: string; time: number }[], t: number): string 
   return bestId;
 }
 
-export function BookmarkList() {
+export function BookmarkList({ onManagePlayers }: { onManagePlayers?: () => void }) {
   const project = useProjectStore(s => s.project);
   const activeSourceId = useProjectStore(s => s.activeSourceId);
   const addBookmark = useProjectStore(s => s.addBookmark);
@@ -28,6 +29,20 @@ export function BookmarkList() {
   const deleteBookmark = useProjectStore(s => s.deleteBookmark);
   const requestSeek = useProjectStore(s => s.requestSeek);
   const rewindSeconds = useSettings(s => s.bookmarkRewindSeconds);
+  const profiles = usePlayerProfiles(s => s.profiles);
+  const [playerId, setPlayerId] = useState('');
+  const players = useMemo(() => {
+    const all = profiles.map(p => ({ ...p, removed: false }));
+    for (const b of project?.bookmarks ?? []) {
+      if (b.playerId && !all.some(p => p.id === b.playerId)) {
+        all.push({ id: b.playerId, name: b.playerName || 'Removed player', shortcut: '', removed: true });
+      }
+    }
+    return all;
+  }, [profiles, project?.bookmarks]);
+  const selectedPlayer = players.find(p => p.id === playerId);
+  const selectedPlayerId = selectedPlayer?.id;
+  const shortcut = selectedPlayer ? selectedPlayer.shortcut.toUpperCase() : 'B';
 
   // Sort by time AND filter to the active source. Bookmarks reference a
   // specific source's timeline, so showing another source's bookmarks
@@ -37,8 +52,9 @@ export function BookmarkList() {
     const primaryId = project.sources[0]?.id;
     return [...project.bookmarks]
       .filter(b => (b.sourceId ?? primaryId) === activeSourceId)
+      .filter(b => b.playerId === selectedPlayerId)
       .sort((a, b) => a.time - b.time || a.createdAt - b.createdAt);
-  }, [project?.bookmarks, project?.sources, activeSourceId]);
+  }, [project?.bookmarks, project?.sources, activeSourceId, selectedPlayerId]);
   const multiSource = (project?.sources.length ?? 0) > 1;
 
   // Held in a ref so the rAF loop reads the latest list without restarting on
@@ -76,7 +92,7 @@ export function BookmarkList() {
   if (!project) return <div className="dim" style={{ padding: 12 }}>Open a video to begin</div>;
 
   function onAdd() {
-    addBookmark(previewClock.currentTime);
+    addBookmark(previewClock.currentTime, selectedPlayer);
   }
 
   function onSeek(time: number) {
@@ -91,11 +107,21 @@ export function BookmarkList() {
         borderBottom: '1px solid var(--border)',
         background: 'var(--panel)',
       }}>
+        <div className="bookmark-player-controls">
+          <select className="bookmark-player-select" aria-label="Bookmark list" value={selectedPlayerId ?? ''}
+            onChange={e => setPlayerId(e.target.value)}>
+            <option value="">General bookmarks (B)</option>
+            {players.map(p => <option key={p.id} value={p.id}>
+              {p.name}{p.removed ? ' (profile removed)' : ` (${p.shortcut.toUpperCase()})`}
+            </option>)}
+          </select>
+          {onManagePlayers && <button onClick={onManagePlayers}>Players…</button>}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span className="dim">Bookmarks ({sorted.length})</span>
+          <span className="dim">{selectedPlayer?.name ?? 'General'} ({sorted.length})</span>
           <button
             onClick={onAdd}
-            title={`Add a bookmark at the preview's current time (shortcut: B). Clicking a bookmark jumps ${rewindSeconds}s before it.`}>
+            title={`Add a bookmark at the preview's current time${shortcut ? ` (shortcut: ${shortcut})` : ''}. Clicking a bookmark jumps ${rewindSeconds}s before it.`}>
             + Bookmark
           </button>
         </div>
@@ -103,7 +129,7 @@ export function BookmarkList() {
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12 }}>
         {sorted.length === 0 ? (
           <div className="dim" style={{ fontSize: 12 }}>
-            No bookmarks yet. Press <strong>B</strong> while watching, or click <strong>+ Bookmark</strong>, to mark a moment.
+            No bookmarks yet. {shortcut && <>Press <strong>{shortcut}</strong> while watching, or </>}click <strong>+ Bookmark</strong> to mark a moment{selectedPlayer ? ` for ${selectedPlayer.name}` : ''}.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

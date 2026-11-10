@@ -6,8 +6,9 @@ import { BookmarkList } from './BookmarkList';
 
 type Tab = 'clips' | 'bookmarks';
 
-export function RightPanel({ onExport }: {
+export function RightPanel({ onExport, onManagePlayers }: {
   onExport: (id: string) => void;
+  onManagePlayers?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('clips');
   const project = useProjectStore(s => s.project);
@@ -53,7 +54,7 @@ export function RightPanel({ onExport }: {
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {tab === 'clips'
           ? (selectedClipId ? <ClipDetail onExport={onExport} /> : <ClipList />)
-          : <BookmarkList />}
+          : <BookmarkList onManagePlayers={onManagePlayers} />}
       </div>
     </div>
   );
