@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '../state/projectStore';
 import { ClipList } from './ClipList';
 import { ClipDetail } from './ClipDetail';
@@ -12,6 +12,10 @@ export function RightPanel({ onExport }: {
   const [tab, setTab] = useState<Tab>('clips');
   const project = useProjectStore(s => s.project);
   const activeSourceId = useProjectStore(s => s.activeSourceId);
+  const sequenceEditContext = useProjectStore(s => s.sequenceEditContext);
+  useEffect(() => {
+    if (sequenceEditContext) setTab('clips');
+  }, [sequenceEditContext]);
 
   // Counts are scoped to the active source — the clip list and bookmark
   // list below also filter to it, so the tab badges have to agree.

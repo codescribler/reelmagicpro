@@ -77,7 +77,9 @@ const ClipSchema = z.object({
   sourceId: z.string().optional(),
   reelFraming: ReelFramingSchema.optional(),
 });
-const SequenceEntrySchema = z.object({ clipId: z.string().min(1) });
+const SequenceEntrySchema = z.object({
+  clipId: z.string().min(1), sourceClipId: z.string().min(1).optional(),
+});
 const NamedSequenceSchema = z.object({
   id: z.string().min(1), name: z.string().trim().min(1).max(80), entries: z.array(SequenceEntrySchema),
   backingTrack: BackingTrackSchema.optional(), brightness: z.number().min(-1).max(1).optional(),

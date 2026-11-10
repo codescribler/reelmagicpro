@@ -5,6 +5,8 @@ import { trimZoomPath } from '../../shared/dynamicZoom';
 import { pruneSequenceClips, restoreActiveSequence, syncActiveSequence } from '../../shared/namedSequences';
 import { namedSequenceActions } from './namedSequenceActions';
 import type { NamedSequenceActions } from './namedSequenceActions';
+import { editSequenceClip, previewModeState, sequenceEntriesState } from './sequenceClipEditing';
+import type { SequenceEditContext } from './sequenceClipEditing';
 
 // Strip a SourceVideo down to the plain SourceMeta fields used by the
 // in-memory `project.sourceVideo` mirror. Matches parseAndClampProject's
@@ -32,6 +34,7 @@ export interface State extends NamedSequenceActions {
   projectPath: string | null;
   dirty: boolean;
   selectedClipId: string | null;
+  sequenceEditContext: SequenceEditContext | null;
   previewMode: PreviewMode;
   invalidClipIds: Set<string>;
 
@@ -149,6 +152,7 @@ export const useProjectStore = create<State>((set, get) => ({
   projectPath: null,
   dirty: false,
   selectedClipId: null,
+  sequenceEditContext: null,
   previewMode: { kind: 'idle' },
   invalidClipIds: new Set(),
   clipCreatedToken: 0,
@@ -162,6 +166,7 @@ export const useProjectStore = create<State>((set, get) => ({
     project: p ? restoreActiveSequence({ ...p, bookmarks: p.bookmarks ?? [] }) : null,
     projectPath: path ?? null, dirty: false,
     selectedClipId: null, previewMode: p ? { kind: 'source' } : { kind: 'idle' },
+    sequenceEditContext: null,
     activeSourceId: p?.sources.find(s => s.id === p.playbackPosition?.sourceId)?.id ?? p?.sources[0]?.id ?? null,
     seekRequest: p ? { time: p.playbackPosition?.time ?? 0, token: (state.seekRequest?.token ?? 0) + 1 } : null,
   })),
@@ -185,7 +190,7 @@ export const useProjectStore = create<State>((set, get) => ({
         },
         dirty: true,
         previewMode: { kind: 'source' },
-        activeSourceId: id,
+        activeSourceId: id, sequenceEditContext: null, selectedClipId: null,
       };
     }
     // Existing project: replace the primary source (and its sources[0]) but
@@ -202,7 +207,7 @@ export const useProjectStore = create<State>((set, get) => ({
       },
       dirty: true,
       previewMode: { kind: 'source' },
-      activeSourceId: id,
+      activeSourceId: id, sequenceEditContext: null, selectedClipId: null,
     };
   }),
 
@@ -220,7 +225,7 @@ export const useProjectStore = create<State>((set, get) => ({
           },
           dirty: true,
           previewMode: { kind: 'source' },
-          activeSourceId: id,
+          activeSourceId: id, sequenceEditContext: null, selectedClipId: null,
         };
       }
       const sources = [...state.project.sources, sv];
@@ -232,6 +237,7 @@ export const useProjectStore = create<State>((set, get) => ({
         previewMode: { kind: 'source' },
         activeSourceId: id,
         selectedClipId: null,
+        sequenceEditContext: null,
       };
     });
     return id;
@@ -266,9 +272,11 @@ export const useProjectStore = create<State>((set, get) => ({
         (b.sourceId ?? s.project!.sources[0]!.id) !== sourceId
       );
       const sequence = s.project.sequence.filter(e => !removedClipIds.has(e.clipId));
+      const sequenceState = sequenceEntriesState(s, sequence);
       const newPrimary = nextSources[0]!;
       const nextActive = s.activeSourceId === sourceId ? newPrimary.id : s.activeSourceId;
       return {
+        ...sequenceState,
         project: pruneSequenceClips({
           ...s.project,
           sourceVideo: toSourceMeta(newPrimary),
@@ -277,7 +285,7 @@ export const useProjectStore = create<State>((set, get) => ({
         }),
         activeSourceId: nextActive,
         selectedClipId: s.selectedClipId && removedClipIds.has(s.selectedClipId)
-          ? null : s.selectedClipId,
+          ? null : sequenceState.selectedClipId,
         dirty: true,
       };
     });
@@ -336,6 +344,7 @@ export const useProjectStore = create<State>((set, get) => ({
       // source's timeline and would otherwise commit a nonsense clip.
       selectedClipId: null,
       previewMode: { kind: 'source' },
+      sequenceEditContext: null,
       marking: null,
     };
   }),
@@ -344,7 +353,7 @@ export const useProjectStore = create<State>((set, get) => ({
     dirty: true,
     clipCreatedToken: state.clipCreatedToken + 1,
   }) : state),
-  updateClip: (id, patch) => set(state => state.project ? ({
+  updateClip: (id, patch) => set(state => editSequenceClip(state, id, (state, id) => state.project ? ({
     project: { ...state.project, clips: state.project.clips.map(c => {
       if (c.id !== id) return c;
       const next = { ...c, ...patch };
@@ -354,17 +363,18 @@ export const useProjectStore = create<State>((set, get) => ({
       return next;
     }) },
     dirty: true,
-  }) : state),
+  }) : state)),
   deleteClip: (id) => set(state => {
     if (!state.project) return state;
     const newSequence = state.project.sequence.filter(e => e.clipId !== id);
+    const sequenceState = sequenceEntriesState(state, newSequence);
     const oldEntry = state.project.sequence[
       state.previewMode.kind === 'sequence' ? state.previewMode.index : -1
     ];
     const sequenceWasPlayingDeletedClip =
       state.previewMode.kind === 'sequence' && oldEntry?.clipId === id;
 
-    let nextPreviewMode = state.previewMode;
+    let nextPreviewMode = sequenceState.previewMode ?? state.previewMode;
     if (
       (state.previewMode.kind === 'clip'
         || state.previewMode.kind === 'set-zoom'
@@ -379,8 +389,9 @@ export const useProjectStore = create<State>((set, get) => ({
     }
 
     return {
+      ...sequenceState,
       project: pruneSequenceClips({ ...state.project, clips: state.project.clips.filter(c => c.id !== id), sequence: newSequence }),
-      selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
+      selectedClipId: state.selectedClipId === id ? null : sequenceState.selectedClipId,
       previewMode: nextPreviewMode,
       dirty: true,
     };
@@ -409,7 +420,7 @@ export const useProjectStore = create<State>((set, get) => ({
   },
   selectClip: (id) => set(state => {
     if (id === null) {
-      return { selectedClipId: null, previewMode: { kind: 'source' } };
+      return { selectedClipId: null, sequenceEditContext: null, previewMode: { kind: 'source' } };
     }
     // Selecting a clip from a different source auto-switches the active
     // source — otherwise the preview would still be loaded with the wrong
@@ -419,6 +430,7 @@ export const useProjectStore = create<State>((set, get) => ({
     const clipSourceId = clip?.sourceId ?? primaryId;
     const patch: Partial<State> = {
       selectedClipId: id,
+      sequenceEditContext: null,
       previewMode: { kind: 'clip', clipId: id },
     };
     if (clipSourceId && clipSourceId !== state.activeSourceId) {
@@ -426,8 +438,8 @@ export const useProjectStore = create<State>((set, get) => ({
     }
     return patch;
   }),
-  viewSource: () => set({ selectedClipId: null, previewMode: { kind: 'source' } }),
-  setPreviewMode: (m) => set({ previewMode: m }),
+  viewSource: () => set({ selectedClipId: null, sequenceEditContext: null, previewMode: { kind: 'source' } }),
+  setPreviewMode: (m) => set(state => previewModeState(state, m)),
   replayToken: 0,
   replayClip: () => set(state => ({ replayToken: state.replayToken + 1 })),
   appendToSequence: (clipId) => set(state => state.project ? ({
@@ -443,34 +455,17 @@ export const useProjectStore = create<State>((set, get) => ({
     const seq = [...state.project.sequence];
     const [moved] = seq.splice(from, 1);
     if (moved) seq.splice(to, 0, moved);
-    let previewMode = state.previewMode;
-    if (previewMode.kind === 'sequence') {
-      let index = previewMode.index;
-      if (index === from) index = to;
-      else if (from < index && to >= index) index--;
-      else if (from > index && to <= index) index++;
-      previewMode = { kind: 'sequence', index };
-    }
-    return { project: syncActiveSequence({ ...state.project, sequence: seq }), previewMode, dirty: true };
+    return sequenceEntriesState(state, seq);
   }),
   removeFromSequence: (index) => set(state => {
-    if (!state.project) return state;
+    if (!state.project || !Number.isInteger(index) || index < 0 || index >= state.project.sequence.length) return state;
     const seq = state.project.sequence.filter((_, i) => i !== index);
-    return { project: syncActiveSequence({ ...state.project, sequence: seq }), dirty: true };
+    return sequenceEntriesState(state, seq);
   }),
   clearSequence: () => set(state => {
     if (!state.project) return state;
     if (state.project.sequence.length === 0) return state;
-    // If the preview is currently playing this sequence, drop back to source
-    // so we don't keep a now-invalid index in previewMode.
-    const nextPreviewMode = state.previewMode.kind === 'sequence'
-      ? { kind: 'source' as const }
-      : state.previewMode;
-    return {
-      project: syncActiveSequence({ ...state.project, sequence: [] }),
-      previewMode: nextPreviewMode,
-      dirty: true,
-    };
+    return sequenceEntriesState(state, []);
   }),
   setSequenceBackingTrack: (track) => set(state => {
     if (!state.project) return state;
@@ -492,11 +487,11 @@ export const useProjectStore = create<State>((set, get) => ({
     return { project: syncActiveSequence(project), dirty: true };
   }),
 
-  nudgeClipBoundary: (clipId, which, deltaSec) => set(state => {
+  nudgeClipBoundary: (clipId, which, deltaSec) => set(state => editSequenceClip(state, clipId, (state, clipId) => {
     if (!state.project) return state;
     const clip = state.project.clips.find(c => c.id === clipId);
     if (!clip) return state;
-    const dur = state.project.sourceVideo.duration;
+    const dur = (resolveSource(state.project, clip.sourceId) ?? state.project.sourceVideo).duration;
     const MIN_LEN = 0.05;
     let newIn = clip.in;
     let newOut = clip.out;
@@ -534,9 +529,9 @@ export const useProjectStore = create<State>((set, get) => ({
       seekRequest: { time: seekTime, token: (state.seekRequest?.token ?? 0) + 1 },
       pauseRequest: { token: (state.pauseRequest?.token ?? 0) + 1 },
     };
-  }),
+  })),
 
-  addFocusMarker: (clipId, marker) => set(state => state.project ? ({
+  addFocusMarker: (clipId, marker) => set(state => editSequenceClip(state, clipId, (state, clipId) => state.project ? ({
     project: {
       ...state.project,
       clips: state.project.clips.map(c =>
@@ -544,8 +539,8 @@ export const useProjectStore = create<State>((set, get) => ({
       ),
     },
     dirty: true,
-  }) : state),
-  updateFocusMarker: (clipId, markerId, patch) => set(state => state.project ? ({
+  }) : state)),
+  updateFocusMarker: (clipId, markerId, patch) => set(state => editSequenceClip(state, clipId, (state, clipId) => state.project ? ({
     project: {
       ...state.project,
       clips: state.project.clips.map(c =>
@@ -555,8 +550,8 @@ export const useProjectStore = create<State>((set, get) => ({
       ),
     },
     dirty: true,
-  }) : state),
-  togglePrimaryMarker: (clipId, markerId) => set(state => {
+  }) : state)),
+  togglePrimaryMarker: (clipId, markerId) => set(state => editSequenceClip(state, clipId, (state, clipId) => {
     if (!state.project) return state;
     const clips = state.project.clips.map(c => {
       if (c.id !== clipId) return c;
@@ -574,8 +569,8 @@ export const useProjectStore = create<State>((set, get) => ({
       return { ...c, focusMarkers };
     });
     return { project: { ...state.project, clips }, dirty: true };
-  }),
-  setReelFraming: (clipId, framing) => set(state => {
+  })),
+  setReelFraming: (clipId, framing) => set(state => editSequenceClip(state, clipId, (state, clipId) => {
     if (!state.project) return state;
     const clips = state.project.clips.map(c => {
       if (c.id !== clipId) return c;
@@ -585,8 +580,8 @@ export const useProjectStore = create<State>((set, get) => ({
       return next;
     });
     return { project: { ...state.project, clips }, dirty: true };
-  }),
-  deleteFocusMarker: (clipId, markerId) => set(state => {
+  })),
+  deleteFocusMarker: (clipId, markerId) => set(state => editSequenceClip(state, clipId, (state, clipId) => {
     if (!state.project) return state;
     let nextMode = state.previewMode;
     if (state.previewMode.kind === 'track-marker' && state.previewMode.markerId === markerId) {
@@ -604,7 +599,7 @@ export const useProjectStore = create<State>((set, get) => ({
       previewMode: nextMode,
       dirty: true,
     };
-  }),
+  })),
 
   addBookmark: (time) => set(state => {
     if (!state.project) return state;
@@ -645,6 +640,7 @@ export const useProjectStore = create<State>((set, get) => ({
   seekRequest: null,
   requestSeek: (time) => set(state => ({
     selectedClipId: null,
+    sequenceEditContext: null,
     previewMode: { kind: 'source' },
     seekRequest: { time: Math.max(0, time), token: (state.seekRequest?.token ?? 0) + 1 },
   })),

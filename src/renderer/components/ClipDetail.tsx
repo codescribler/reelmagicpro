@@ -12,6 +12,7 @@ export function ClipDetail({ onExport }: {
 }) {
   const project = useProjectStore(s => s.project);
   const selectedId = useProjectStore(s => s.selectedClipId);
+  const sequenceEditContext = useProjectStore(s => s.sequenceEditContext);
   const invalid = useProjectStore(s => s.invalidClipIds);
   const del = useProjectStore(s => s.deleteClip);
   const dup = useProjectStore(s => s.duplicateClip);
@@ -19,6 +20,7 @@ export function ClipDetail({ onExport }: {
   const viewSource = useProjectStore(s => s.viewSource);
   const updateClip = useProjectStore(s => s.updateClip);
   const appendToSequence = useProjectStore(s => s.appendToSequence);
+  const removeFromSequence = useProjectStore(s => s.removeFromSequence);
   const replayClip = useProjectStore(s => s.replayClip);
   const recordingZoom = useProjectStore(s => s.previewMode.kind === 'record-zoom');
   const clipCreatedToken = useProjectStore(s => s.clipCreatedToken);
@@ -72,6 +74,11 @@ export function ClipDetail({ onExport }: {
             if (isUntitled) el.select();
           }}
         />
+        {sequenceEditContext && (
+          <p className="dim" style={{ fontSize: 11, margin: '0 0 8px' }}>
+            Editing this sequence clip. Changes are saved to a separate version; the original clip is kept.
+          </p>
+        )}
         {isInv && (
           <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--danger)' }}>
             Clip is invalid (in / out outside source duration).
@@ -103,7 +110,10 @@ export function ClipDetail({ onExport }: {
           </button>
           <span className="clip-controls-spacer" />
           <button onClick={() => { const newId = dup(clip.id); if (newId) select(newId); }}>Duplicate</button>
-          <button onClick={() => del(clip.id)}>Delete</button>
+          <button onClick={() => sequenceEditContext
+            ? removeFromSequence(sequenceEditContext.index) : del(clip.id)}>
+            {sequenceEditContext ? 'Remove from sequence' : 'Delete'}
+          </button>
         </div>
         <ClipEditor clipId={clip.id} />
       </div>

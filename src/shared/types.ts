@@ -123,6 +123,8 @@ export interface Clip {
 
 export interface SequenceEntry {
   clipId: string;
+  // Present after this occurrence has been given its own editable version.
+  sourceClipId?: string;
 }
 
 export interface NamedSequence {

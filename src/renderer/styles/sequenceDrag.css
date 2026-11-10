@@ -10,6 +10,7 @@
 }
 .sequence-strip .seq-chip { flex-shrink: 0; user-select: none; }
 .sequence-drag-handle { color: var(--muted); letter-spacing: -3px; padding-right: 3px; }
+.sequence-framing-warning { display: inline-flex; flex-shrink: 0; color: #f4c55a; }
 .seq-drop-before::after, .seq-drop-after::after {
   content: '';
   position: absolute;

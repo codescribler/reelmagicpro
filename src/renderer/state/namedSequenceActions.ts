@@ -13,7 +13,7 @@ export interface NamedSequenceActions {
 export function namedSequenceActions(set: StoreApi<State>['setState'], get: StoreApi<State>['getState']): NamedSequenceActions {
   function activate(project: Project) {
     set(state => ({ project: restoreActiveSequence(project), dirty: true,
-      selectedClipId: null, previewMode: { kind: 'source' },
+      selectedClipId: null, sequenceEditContext: null, previewMode: { kind: 'source' },
       pauseRequest: { token: (state.pauseRequest?.token ?? 0) + 1 } }));
   }
   return {

@@ -234,6 +234,11 @@ function SoundSection({ clip }: { clip: Clip }) {
   const sourceSilencedBySlowmo = clip.speed !== 1;
 
   async function chooseTrack() {
+    // Hold this occurrence while the file dialog is open; sequence playback
+    // must not advance to another clip before the chosen track is applied.
+    const state = useProjectStore.getState();
+    state.setPreviewMode({ kind: 'clip', clipId: clip.id });
+    state.requestPause();
     const r = await window.reelmagic.chooseBackingTrack();
     if (!r.ok || !r.path) return;
     const next: BackingTrack = {

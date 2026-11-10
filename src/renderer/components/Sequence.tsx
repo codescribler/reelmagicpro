@@ -98,6 +98,18 @@ export function Sequence({ onExportSequence }: {
               <span className="sequence-drag-handle" aria-hidden="true">⋮⋮</span>
               <span className="dim" style={{ fontSize: 11 }}>{i + 1}.</span>
               <span>{clip?.name ?? '???'}</span>
+              {clip && !clip.reelFraming?.panPath.length && (
+                <span className="sequence-framing-warning" role="img"
+                  aria-label="Reel framing not set"
+                  title="Reel framing not set. Use Frame reel to keep the action in view for Instagram.">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <path d="M12 3 2 21h20L12 3Z" />
+                    <path d="M12 9v5m0 3h.01" />
+                  </svg>
+                </span>
+              )}
               <button
                 draggable={false}
                 onDragStart={e => e.preventDefault()}

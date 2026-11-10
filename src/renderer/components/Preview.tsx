@@ -235,7 +235,8 @@ export function Preview() {
             setPreviewMode({ kind: 'sequence', index: next });
           } else {
             v.pause();
-            setPreviewMode({ kind: 'source' });
+            // Retain the last sequence occurrence and its edit context while
+            // paused; changing modes here would seek back to the clip's start.
           }
         } else {
           v.pause();
