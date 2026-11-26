@@ -467,7 +467,7 @@ export function Preview() {
   // we hide markers.
   const visibleMarkers = (() => {
     if (!activeClip || suspendZoom || isRecordZoom) return [];
-    return activeClip.focusMarkers.filter(m => tickTime >= m.in && tickTime <= m.out);
+    return activeClip.focusMarkers.filter(m => m.in < m.out && tickTime >= m.in && tickTime <= m.out);
   })();
   const clipRelT = activeClip ? Math.max(0, tickTime - activeClip.in) : 0;
 

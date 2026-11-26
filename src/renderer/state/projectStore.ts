@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Project, Clip, SourceMeta, SourceVideo, SequenceEntry, ZoomRect, FocusMarker, Bookmark, ExportProgress, BackingTrack, ReelFraming, PlayerProfile } from '../../shared/types';
 import { newSourceId, resolveSource } from '../../shared/resolveSource';
-import { trimZoomPath } from '../../shared/dynamicZoom';
+import { updateClipTiming, updateMarkerTiming } from '../../shared/clipTiming';
 import { pruneSequenceClips, restoreActiveSequence, syncActiveSequence } from '../../shared/namedSequences';
 import { namedSequenceActions } from './namedSequenceActions';
 import type { NamedSequenceActions } from './namedSequenceActions';
@@ -356,11 +356,7 @@ export const useProjectStore = create<State>((set, get) => ({
   updateClip: (id, patch) => set(state => editSequenceClip(state, id, (state, id) => state.project ? ({
     project: { ...state.project, clips: state.project.clips.map(c => {
       if (c.id !== id) return c;
-      const next = { ...c, ...patch };
-      if (!('zoomPath' in patch) && (next.in !== c.in || next.out !== c.out)) {
-        next.zoomPath = trimZoomPath(c.zoomPath, next.in - c.in, next.out - next.in);
-      }
-      return next;
+      return updateClipTiming(c, patch);
     }) },
     dirty: true,
   }) : state)),
@@ -470,7 +466,12 @@ export const useProjectStore = create<State>((set, get) => ({
   setSequenceBackingTrack: (track) => set(state => {
     if (!state.project) return state;
     const project = { ...state.project };
-    if (track) project.sequenceBackingTrack = track;
+    if (track) {
+      const next = { ...track };
+      if (track.videoMomentSec !== project.sequenceBackingTrack?.videoMomentSec
+        || (track.offsetSec === undefined && track.musicMomentSec === undefined)) delete next.sequenceAnchor;
+      project.sequenceBackingTrack = next;
+    }
     else delete project.sequenceBackingTrack;
     return { project: syncActiveSequence(project), dirty: true };
   }),
@@ -502,24 +503,12 @@ export const useProjectStore = create<State>((set, get) => ({
       newOut = Math.max(clip.in + MIN_LEN, Math.min(dur, clip.out + deltaSec));
       if (newOut === clip.out) return state;
     }
-    // Pull markers back inside the (possibly tightened) clip range. If a
-    // marker's window collapses completely, fall back to the full clip
-    // range so it stays valid rather than vanishing silently.
-    const focusMarkers = clip.focusMarkers.map(m => {
-      let mIn = m.in;
-      let mOut = m.out;
-      if (mIn < newIn) mIn = newIn;
-      if (mOut > newOut) mOut = newOut;
-      if (mIn >= mOut) { mIn = newIn; mOut = newOut; }
-      return { ...m, in: mIn, out: mOut };
-    });
     const seekTime = which === 'in' ? newIn : newOut;
     return {
       project: {
         ...state.project,
         clips: state.project.clips.map(c =>
-          c.id === clipId ? { ...c, in: newIn, out: newOut, focusMarkers,
-            zoomPath: trimZoomPath(c.zoomPath, newIn - clip.in, newOut - newIn) } : c
+          c.id === clipId ? updateClipTiming(c, { in: newIn, out: newOut }) : c
         ),
       },
       dirty: true,
@@ -545,7 +534,7 @@ export const useProjectStore = create<State>((set, get) => ({
       ...state.project,
       clips: state.project.clips.map(c =>
         c.id === clipId
-          ? { ...c, focusMarkers: c.focusMarkers.map(m => m.id === markerId ? { ...m, ...patch } : m) }
+          ? { ...c, focusMarkers: c.focusMarkers.map(m => m.id === markerId ? updateMarkerTiming(m, patch, c.in) : m) }
           : c
       ),
     },

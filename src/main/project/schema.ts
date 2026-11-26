@@ -13,6 +13,8 @@ const FocusMarkerPathPointSchema = z.object({
   cy: z.number(),
 });
 const FocusMarkerSchema = z.object({
+  timingSource: z.object({ clipIn: z.number().finite(), in: z.number().finite(), out: z.number().finite(),
+    path: z.array(FocusMarkerPathPointSchema).optional() }).optional(),
   id: z.string().min(1),
   playerId: z.string().min(1).optional(),
   x: z.number(),
@@ -53,6 +55,7 @@ const SourceVideoSchema = SourceSchema.extend({
   name: z.string().optional(),
 });
 const BackingTrackSchema = z.object({
+  sequenceAnchor: z.object({ index: z.number().int().min(0), sourceTime: z.number().finite() }).optional(),
   path: z.string().min(1),
   volume: z.number().min(0).max(1),
   muteSource: z.boolean(),
@@ -62,16 +65,22 @@ const BackingTrackSchema = z.object({
   fadeInSec: z.number().finite().min(0).max(10).optional(),
   durationSec: z.number().finite().positive().optional(),
 });
+const CameraPathSchema = z.array(z.object({
+  t: z.number().finite(), cx: z.number().finite(), cy: z.number().finite(), zoom: z.number().finite(),
+}));
 const ClipSchema = z.object({
+  timingSource: z.object({
+    zoom: z.object({ in: z.number().finite(), path: CameraPathSchema }).optional(),
+    reel: z.object({ in: z.number().finite(), framing: ReelFramingSchema }).optional(),
+    music: z.object({ in: z.number().finite(), speed: z.number().positive(), track: BackingTrackSchema }).optional(),
+  }).optional(),
   id: z.string().min(1),
   name: z.string(),
   in: z.number().min(0),
   out: z.number().min(0),
   speed: z.number(),
   zoom: ZoomRectSchema,
-  zoomPath: z.array(z.object({
-    t: z.number().finite(), cx: z.number().finite(), cy: z.number().finite(), zoom: z.number().finite(),
-  })).optional(),
+  zoomPath: CameraPathSchema.optional(),
   focusMarkers: z.array(FocusMarkerSchema).default([]),
   backingTrack: BackingTrackSchema.optional(),
   brightness: z.number().min(-1).max(1).optional(),
@@ -185,7 +194,7 @@ export function parseAndClampProject(raw: unknown): ParseResult {
       if (fm.y + fm.height > sh) fm.height = Math.max(1, sh - fm.y);
       if (fm.in < next.in) fm.in = next.in;
       if (fm.out > next.out) fm.out = next.out;
-      if (fm.in >= fm.out) { fm.in = next.in; fm.out = next.out; }
+      if (fm.in >= fm.out && !fm.timingSource) { fm.in = next.in; fm.out = next.out; }
       return fm;
     });
     return next;

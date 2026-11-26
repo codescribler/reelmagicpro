@@ -1,6 +1,7 @@
 import type { State, PreviewMode } from './projectStore';
 import { activeNamedSequence, syncActiveSequence } from '../../shared/namedSequences';
 import type { SequenceEntry } from '../../shared/types';
+import { moveSequenceMusicAnchor, retimeSequenceMusic } from '../../shared/sequenceMusicTiming';
 
 export interface SequenceEditContext {
   index: number;
@@ -50,7 +51,8 @@ export function sequenceEntriesState(state: State, sequence: SequenceEntry[]): P
     ? sequence.indexOf(state.project.sequence[state.previewMode.index]!) : -1;
   const removedSelection = !!context && editingIndex < 0;
   return {
-    project: syncActiveSequence({ ...state.project, sequence }), dirty: true,
+    project: syncActiveSequence({ ...state.project, sequence,
+      sequenceBackingTrack: moveSequenceMusicAnchor(state.project.sequenceBackingTrack, state.project.sequence, sequence, state.project.clips) }), dirty: true,
     sequenceEditContext: context && editingIndex >= 0 ? { ...context, index: editingIndex } : null,
     selectedClipId: removedSelection ? null : state.selectedClipId,
     previewMode: removedSelection ? { kind: 'source' } : state.previewMode.kind === 'sequence'
@@ -68,8 +70,10 @@ export function editSequenceClip(
   const clipId = sequenceEditingClipId(state, id);
   const result = update(state, clipId);
   if (result === state || !state.project) return result;
+  const finish = (result: Partial<State>): Partial<State> => result.project
+    ? { ...result, project: retimeSequenceMusic(state.project!, result.project) } : result;
   const entry = editingEntry(state);
-  if (!entry || entry.clipId !== clipId) return result;
+  if (!entry || entry.clipId !== clipId) return finish(result);
   const original = state.project.clips.find(c => c.id === clipId);
   if (!original) return result;
 
@@ -95,5 +99,5 @@ export function editSequenceClip(
     editingState = { ...editingState, previewMode: { kind: 'clip', clipId: targetId },
       pauseRequest: { token: (state.pauseRequest?.token ?? 0) + 1 } };
   }
-  return { ...editingState, ...update(editingState, targetId) };
+  return finish({ ...editingState, ...update(editingState, targetId) });
 }

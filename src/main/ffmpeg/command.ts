@@ -284,7 +284,8 @@ function buildMarkerFilters(clip: Clip, source: SourceMeta): string {
   // so when any oval is present we run the whole marker chain in rgba and
   // convert back to yuv420p afterwards. This keeps colours consistent across
   // shapes without paying the format conversion cost when there are no ovals.
-  const markers = clip.focusMarkers.map(markerForDisplay);
+  const markers = clip.focusMarkers.filter(m => m.in < m.out).map(markerForDisplay);
+  if (!markers.length) return '';
   const hasOval = markers.some(m => m.shape === 'oval' || m.shape === 'pitch');
 
   const perMarker = markers.map((m: FocusMarker) => {

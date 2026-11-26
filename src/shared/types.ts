@@ -38,6 +38,8 @@ export interface FocusMarkerPathPoint {
 }
 
 export interface FocusMarker {
+  // Uncut timing retained so adjusting a boundary back restores the recording.
+  timingSource?: { clipIn: number; in: number; out: number; path?: FocusMarkerPathPoint[] };
   id: string;
   playerId?: string; // saved profile; label remains a snapshot for portable projects
   x: number;       // top-left in source pixels (used when path is empty)
@@ -88,6 +90,7 @@ export interface ReelFraming {
 // source is silenced regardless. The export always fades the final audio
 // down to zero in its last fraction of a second.
 export interface BackingTrack {
+  sequenceAnchor?: { index: number; sourceTime: number };
   path: string;
   volume: number;
   muteSource: boolean;
@@ -100,6 +103,11 @@ export interface BackingTrack {
 }
 
 export interface Clip {
+  timingSource?: {
+    zoom?: { in: number; path: CameraPoint[] };
+    reel?: { in: number; framing: ReelFraming };
+    music?: { in: number; speed: number; track: BackingTrack };
+  };
   id: string;
   name: string;
   in: number;

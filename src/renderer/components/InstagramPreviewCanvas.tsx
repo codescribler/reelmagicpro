@@ -151,7 +151,7 @@ function drawReelFrame(
   ctx.rect(0, dy, c.width, bandH);
   ctx.clip();
   for (const m of clip.focusMarkers.map(markerForDisplay)) {
-    if (v.currentTime < m.in || v.currentTime > m.out) continue;
+    if (m.in >= m.out || v.currentTime < m.in || v.currentTime > m.out) continue;
     const { cx: mx, cy: my } = markerCentreAt(m, t);
     const cxp = ((mx - z.x) * srcW) / z.width;
     const cyp = ((my - z.y) * srcH) / z.height;
